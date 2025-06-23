@@ -29,7 +29,7 @@ class WeatherNewsBot:
             wait_on_rate_limit=True
         )
         
-        print("✅ Twitter API v1.1認証完了")
+        print("✅ Twitter API v2認証完了")
     
     def fetch_schedule_data(self):
         """番組表データを取得（複数ソース対応）"""
