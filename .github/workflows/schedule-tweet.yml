@@ -3,9 +3,9 @@ name: Weather News Schedule Tweet Every 3 Hours
 
 on:
   schedule:
-  - cron: '0 0,12 * * *'
-    workflow_dispatch: # 手動実行も可能
-
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+  
 jobs:
   tweet-schedule:
     runs-on: ubuntu-latest
