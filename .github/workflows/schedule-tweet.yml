@@ -3,10 +3,8 @@ name: Weather News Schedule Tweet Every 3 Hours
 
 on:
   schedule:
-    # 3時間毎に実行: 0:00, 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00 (UTC)
-    # 日本時間では: 9:00, 12:00, 15:00, 18:00, 21:00, 00:00, 03:00, 06:00
-    - cron: '0 0,3,6,9,12,15,18,21 * * *'
-  workflow_dispatch: # 手動実行も可能
+  - cron: '0 0,12 * * *'
+    workflow_dispatch: # 手動実行も可能
 
 jobs:
   tweet-schedule:
