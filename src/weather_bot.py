@@ -29,25 +29,31 @@ class WeatherNewsBot:
             wait_on_rate_limit=True
         )
         
-        print("✅ Twitter API認証完了")
+        print("✅ Twitter API v1.1認証完了")
     
     def fetch_schedule_data(self):
-        """番組表データを取得"""
+        """番組表データを取得（複数ソース対応）"""
+        # メインソース: minorinサイト
+        main_url = "https://minorin.jp/wnl/caster.cgi"
+        
         try:
-            url = "https://minorin.jp/wnl/caster.cgi"
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
-            print(f"📡 番組表データを取得中: {url}")
-            response = requests.get(url, headers=headers, timeout=30)
+            print(f"📡 番組表データを取得中: {main_url}")
+            response = requests.get(main_url, headers=headers, timeout=30)
             response.raise_for_status()
             
             print("✅ 番組表データ取得成功")
             return response.text
             
         except requests.RequestException as e:
-            print(f"❌ 番組表データ取得失敗: {e}")
+            print(f"❌ メインソース取得失敗: {e}")
+            
+            # 将来的にはここで公式サイトからの取得を試行
+            # または他のバックアップソースを利用
+            print("ℹ️  公式サイトからの取得は今後の機能として予定しています")
             return None
     
     def parse_schedule(self, html_content):
