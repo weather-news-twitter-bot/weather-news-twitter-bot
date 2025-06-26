@@ -1,4 +1,4 @@
-# src/weather_bot_simple.py
+# src/weather_bot.py
 import tweepy
 import os
 import sys
@@ -10,20 +10,26 @@ import re
 
 class WeatherNewsBot:
     def __init__(self):
-        """Twitter API認証の設定（記事と同じ方式）"""
+        """X API v2認証の設定"""
+        # Bearer Token方式（推奨）
+        self.bearer_token = os.environ.get('TWITTER_BEARER_TOKEN')
+        
+        # OAuth 1.0a方式（投稿には必要）
         self.api_key = os.environ.get('TWITTER_API_KEY')
         self.api_secret = os.environ.get('TWITTER_API_SECRET')
         self.access_token = os.environ.get('TWITTER_ACCESS_TOKEN')
         self.access_token_secret = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET')
         
         # 必要な環境変数がすべて設定されているかチェック
-        if not all([self.api_key, self.api_secret, self.access_token, self.access_token_secret]):
+        if not all([self.bearer_token, self.api_key, self.api_secret, 
+                   self.access_token, self.access_token_secret]):
             raise ValueError("Twitter API認証情報が不足しています。以下の環境変数を設定してください:\n"
-                           "TWITTER_API_KEY, TWITTER_API_SECRET, "
+                           "TWITTER_BEARER_TOKEN, TWITTER_API_KEY, TWITTER_API_SECRET, "
                            "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET")
         
-        # Twitter API v2クライアント初期化（記事と同じ方式）
+        # X API v2クライアント初期化（Bearer Token + OAuth 1.0a）
         self.client = tweepy.Client(
+            bearer_token=self.bearer_token,
             consumer_key=self.api_key,
             consumer_secret=self.api_secret,
             access_token=self.access_token,
@@ -31,7 +37,7 @@ class WeatherNewsBot:
             wait_on_rate_limit=True
         )
         
-        print("✅ Twitter API v2認証完了")
+        print("✅ X API v2認証完了")
         
         # 認証テスト
         try:
@@ -149,6 +155,19 @@ class WeatherNewsBot:
         if current_time in day_schedule:
             current_caster = day_schedule[current_time]["caster"]
         
+        # 指定された順序で番組表文字列を構築
+        schedule_parts = []
+        time_order = ["11:00", "14:00", "17:00", "20:00", "23:00", "00:00", "05:00", "08:00", "11:00"]
+        
+        for time_slot in time_order:
+            if time_slot in day_schedule:
+                program = day_schedule[time_slot]["program"]
+                caster = day_schedule[time_slot]["caster"]
+                schedule_parts.append(f"{time_slot}-{program}-{caster}")
+            else:
+                # 23:00と00:00は番組なし
+                schedule_parts.append(f"{time_slot}--none")
+        
         # 日付情報の整形
         date_obj = datetime.strptime(target_date, "%Y-%m-%d")
         date_str = date_obj.strftime("%m/%d")
@@ -159,7 +178,8 @@ class WeatherNewsBot:
         now = datetime.now()
         current_time_str = now.strftime("%H:%M")
         
-        # 主要な時間帯のみ表示（コンパクト版）
+        # ツイート文を構築（コンパクト版）
+        # 主要な時間帯のみ表示
         main_slots = ["11:00", "14:00", "17:00", "20:00"]
         main_schedule = []
         for time_slot in main_slots:
@@ -246,6 +266,7 @@ class WeatherNewsBot:
             print(f"❌ 権限エラー: {e}")
             print(f"❌ エラー詳細: {e.response.text if hasattr(e, 'response') else 'レスポンス詳細なし'}")
             print("💡 アプリの権限設定を確認してください（Read and Write必要）")
+            print("💡 Elevated accessが必要な可能性があります")
             return False
         except tweepy.Unauthorized as e:
             print(f"❌ 認証エラー: {e}")
