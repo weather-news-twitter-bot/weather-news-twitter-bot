@@ -10,26 +10,20 @@ import re
 
 class WeatherNewsBot:
     def __init__(self):
-        """X API v2認証の設定"""
-        # Bearer Token方式（推奨）
-        self.bearer_token = os.environ.get('TWITTER_BEARER_TOKEN')
-        
-        # OAuth 1.0a方式（投稿には必要）
+        """Twitter API認証の設定（記事と同じ方式）"""
         self.api_key = os.environ.get('TWITTER_API_KEY')
         self.api_secret = os.environ.get('TWITTER_API_SECRET')
         self.access_token = os.environ.get('TWITTER_ACCESS_TOKEN')
         self.access_token_secret = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET')
         
         # 必要な環境変数がすべて設定されているかチェック
-        if not all([self.bearer_token, self.api_key, self.api_secret, 
-                   self.access_token, self.access_token_secret]):
+        if not all([self.api_key, self.api_secret, self.access_token, self.access_token_secret]):
             raise ValueError("Twitter API認証情報が不足しています。以下の環境変数を設定してください:\n"
-                           "TWITTER_BEARER_TOKEN, TWITTER_API_KEY, TWITTER_API_SECRET, "
+                           "TWITTER_API_KEY, TWITTER_API_SECRET, "
                            "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET")
         
-        # X API v2クライアント初期化（Bearer Token + OAuth 1.0a）
+        # Twitter API v2クライアント初期化（記事と同じ方式）
         self.client = tweepy.Client(
-            bearer_token=self.bearer_token,
             consumer_key=self.api_key,
             consumer_secret=self.api_secret,
             access_token=self.access_token,
