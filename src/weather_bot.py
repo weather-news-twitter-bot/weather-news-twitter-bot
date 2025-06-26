@@ -10,18 +10,26 @@ import re
 
 class WeatherNewsBot:
     def __init__(self):
-        """Twitter API認証の設定"""
+        """X API v2認証の設定"""
+        # Bearer Token方式（推奨）
+        self.bearer_token = os.environ.get('TWITTER_BEARER_TOKEN')
+        
+        # OAuth 1.0a方式（投稿には必要）
         self.api_key = os.environ.get('TWITTER_API_KEY')
         self.api_secret = os.environ.get('TWITTER_API_SECRET')
         self.access_token = os.environ.get('TWITTER_ACCESS_TOKEN')
         self.access_token_secret = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET')
         
         # 必要な環境変数がすべて設定されているかチェック
-        if not all([self.api_key, self.api_secret, self.access_token, self.access_token_secret]):
-            raise ValueError("Twitter API認証情報が不足しています")
+        if not all([self.bearer_token, self.api_key, self.api_secret, 
+                   self.access_token, self.access_token_secret]):
+            raise ValueError("Twitter API認証情報が不足しています。以下の環境変数を設定してください:\n"
+                           "TWITTER_BEARER_TOKEN, TWITTER_API_KEY, TWITTER_API_SECRET, "
+                           "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET")
         
-        # Twitter API v2クライアント初期化
+        # X API v2クライアント初期化（Bearer Token + OAuth 1.0a）
         self.client = tweepy.Client(
+            bearer_token=self.bearer_token,
             consumer_key=self.api_key,
             consumer_secret=self.api_secret,
             access_token=self.access_token,
@@ -29,7 +37,15 @@ class WeatherNewsBot:
             wait_on_rate_limit=True
         )
         
-        print("✅ Twitter API v2認証完了")
+        print("✅ X API v2認証完了")
+        
+        # 認証テスト
+        try:
+            user = self.client.get_me()
+            print(f"✅ 認証成功: @{user.data.username}")
+        except Exception as e:
+            print(f"❌ 認証テスト失敗: {e}")
+            raise
     
     def fetch_schedule_data(self):
         """番組表データを取得（複数ソース対応）"""
@@ -38,7 +54,12 @@ class WeatherNewsBot:
         
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
             }
             
             print(f"📡 番組表データを取得中: {main_url}")
@@ -50,9 +71,6 @@ class WeatherNewsBot:
             
         except requests.RequestException as e:
             print(f"❌ メインソース取得失敗: {e}")
-            
-            # 将来的にはここで公式サイトからの取得を試行
-            # または他のバックアップソースを利用
             print("ℹ️  公式サイトからの取得は今後の機能として予定しています")
             return None
     
@@ -161,7 +179,7 @@ class WeatherNewsBot:
         current_time_str = now.strftime("%H:%M")
         
         # ツイート文を構築（現在の番組を強調、改行で見やすく）
-        schedule_string = "\n".join(schedule_parts)  # スペースではなく改行で結合
+        schedule_string = "\n".join(schedule_parts)
         
         tweet_text = f"""📺 {date_str}({weekday}) ウェザーニュースLiVE番組表
 
@@ -223,7 +241,7 @@ class WeatherNewsBot:
             
             if response.data:
                 tweet_id = response.data['id']
-                tweet_url = f"https://twitter.com/i/status/{tweet_id}"
+                tweet_url = f"https://x.com/i/status/{tweet_id}"
                 print(f"✅ ツイート投稿成功!")
                 print(f"🔗 URL: {tweet_url}")
                 return True
@@ -236,6 +254,11 @@ class WeatherNewsBot:
             return False
         except tweepy.Forbidden as e:
             print(f"❌ 権限エラー: {e}")
+            print("💡 アプリの権限設定を確認してください（Read and Write必要）")
+            return False
+        except tweepy.Unauthorized as e:
+            print(f"❌ 認証エラー: {e}")
+            print("💡 APIキーとトークンが正しいか確認してください")
             return False
         except Exception as e:
             print(f"❌ ツイート投稿エラー: {e}")
