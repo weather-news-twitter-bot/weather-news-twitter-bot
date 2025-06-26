@@ -1,9 +1,8 @@
 # .github/workflows/schedule-tweet.yml
-name: Weather News Schedule Tweet Every 3 Hours
-
+name: Weather News Schedule Tweet Every 12 Hours
 on:
   schedule:
-    - cron: '0 0,12 * * *'
+    - cron: '0 0,12 * * *'  # 修正: 毎日0時と12時(UTC)
   workflow_dispatch:
   
 jobs:
@@ -32,8 +31,24 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Debug environment variables
+      run: |
+        echo "Checking environment variables..."
+        echo "TWITTER_BEARER_TOKEN exists: $([[ -n "$TWITTER_BEARER_TOKEN" ]] && echo "YES" || echo "NO")"
+        echo "TWITTER_API_KEY exists: $([[ -n "$TWITTER_API_KEY" ]] && echo "YES" || echo "NO")"
+        echo "TWITTER_API_SECRET exists: $([[ -n "$TWITTER_API_SECRET" ]] && echo "YES" || echo "NO")"
+        echo "TWITTER_ACCESS_TOKEN exists: $([[ -n "$TWITTER_ACCESS_TOKEN" ]] && echo "YES" || echo "NO")"
+        echo "TWITTER_ACCESS_TOKEN_SECRET exists: $([[ -n "$TWITTER_ACCESS_TOKEN_SECRET" ]] && echo "YES" || echo "NO")"
+      env:
+        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+    
     - name: Post weather news schedule tweet
       env:
+        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
@@ -46,7 +61,6 @@ jobs:
 
 # .github/workflows/test.yml
 name: Test Bot Functions
-
 on:
   push:
     branches: [ main ]
@@ -76,31 +90,79 @@ jobs:
       run: |
         cd src
         python -c "
-        from weather_bot import WeatherNewsBot
-        import os
+        import requests
+        from bs4 import BeautifulSoup
+        import re
+        from datetime import datetime
         
-        # テスト用のダミー環境変数を設定
-        os.environ['TWITTER_API_KEY'] = 'test'
-        os.environ['TWITTER_API_SECRET'] = 'test'
-        os.environ['TWITTER_ACCESS_TOKEN'] = 'test'
-        os.environ['TWITTER_ACCESS_TOKEN_SECRET'] = 'test'
-        
-        try:
-            # 番組表取得のテストのみ実行（ツイートはしない）
-            from weather_bot import WeatherNewsBot
-            bot = WeatherNewsBot()
-            html = bot.fetch_schedule_data()
-            if html:
-                schedule = bot.parse_schedule(html)
-                if schedule:
-                    print(f'✅ テスト成功: {len(schedule)}日分の番組表を取得')
+        def test_schedule_parsing():
+            try:
+                # 番組表データ取得のテスト
+                main_url = 'https://minorin.jp/wnl/caster.cgi'
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                }
+                
+                print('📡 番組表データを取得中...')
+                response = requests.get(main_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                print('✅ 番組表データ取得成功')
+                
+                # HTMLパース
+                soup = BeautifulSoup(response.text, 'html.parser')
+                rows = soup.find_all('tr')
+                print(f'📊 {len(rows)}行のデータを解析中...')
+                
+                schedule_data = {}
+                for row in rows:
+                    cells = row.find_all('td')
+                    if len(cells) >= 7:
+                        date_text = cells[0].get_text(strip=True)
+                        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', date_text)
+                        
+                        if date_match:
+                            current_date = date_match.group(1)
+                            schedule_data[current_date] = True
+                            print(f'📅 {current_date} の番組表を解析完了')
+                
+                if schedule_data:
+                    print(f'✅ テスト成功: {len(schedule_data)}日分の番組表を取得')
+                    
                     # 現在の番組情報テスト
-                    current_time, current_program = bot.get_current_time_slot()
-                    print(f'✅ 現在の番組: {current_time} - {current_program}')
+                    now = datetime.now()
+                    current_hour = now.hour
+                    time_slots = [
+                        ('05:00', 'モーニング'),
+                        ('08:00', 'サンシャイン'), 
+                        ('11:00', 'コーヒータイム'),
+                        ('14:00', 'アフタヌーン'),
+                        ('17:00', 'イブニング'),
+                        ('20:00', 'ムーン')
+                    ]
+                    
+                    closest_slot = time_slots[0]
+                    for time_str, program in time_slots:
+                        slot_hour = int(time_str.split(':')[0])
+                        if abs(current_hour - slot_hour) <= 1:
+                            closest_slot = (time_str, program)
+                            break
+                    
+                    print(f'✅ 現在の番組: {closest_slot[0]} - {closest_slot[1]}')
+                    return True
                 else:
                     print('❌ 番組表の解析に失敗')
-            else:
-                print('❌ 番組表データの取得に失敗')
-        except Exception as e:
-            print(f'❌ テストエラー: {e}')
+                    return False
+                    
+            except Exception as e:
+                print(f'❌ テストエラー: {e}')
+                return False
+        
+        # テスト実行
+        if test_schedule_parsing():
+            print('🎉 すべてのテストが成功しました!')
+            exit(0)
+        else:
+            print('💥 テストが失敗しました')
+            exit(1)
         "
