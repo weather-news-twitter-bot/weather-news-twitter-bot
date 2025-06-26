@@ -2,7 +2,7 @@
 name: Weather News Schedule Tweet Every 12 Hours
 on:
   schedule:
-    - cron: '0 0,12 * * *'  # 修正: 毎日0時と12時(UTC)
+    - cron: '0 0,12 * * *'  # 毎日0時と12時(UTC)
   workflow_dispatch:
   
 jobs:
@@ -34,21 +34,29 @@ jobs:
     - name: Debug environment variables
       run: |
         echo "Checking environment variables..."
-        echo "TWITTER_BEARER_TOKEN exists: $([[ -n "$TWITTER_BEARER_TOKEN" ]] && echo "YES" || echo "NO")"
         echo "TWITTER_API_KEY exists: $([[ -n "$TWITTER_API_KEY" ]] && echo "YES" || echo "NO")"
         echo "TWITTER_API_SECRET exists: $([[ -n "$TWITTER_API_SECRET" ]] && echo "YES" || echo "NO")"
         echo "TWITTER_ACCESS_TOKEN exists: $([[ -n "$TWITTER_ACCESS_TOKEN" ]] && echo "YES" || echo "NO")"
         echo "TWITTER_ACCESS_TOKEN_SECRET exists: $([[ -n "$TWITTER_ACCESS_TOKEN_SECRET" ]] && echo "YES" || echo "NO")"
       env:
-        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
     
+    # オプション: 詳細デバッグ（必要に応じて）
+    - name: Run authentication debug
+      env:
+        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+      run: |
+        cd src
+        python debug_twitter_auth.py
+    
     - name: Post weather news schedule tweet
       env:
-        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
