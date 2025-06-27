@@ -49,9 +49,9 @@ class WeatherNewsBot:
         return today_jst, jst_now
     
     def fetch_schedule_data(self):
-        """番組表データを取得"""
+        """番組表データを取得（静的HTML優先、必要に応じて動的取得）"""
         try:
-            print("📡 番組表データを取得中...")
+            print("📡 番組表データを取得中（静的HTML）...")
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -65,11 +65,87 @@ class WeatherNewsBot:
             # エンコーディングを正しく設定
             response.encoding = 'utf-8'
             
-            print(f"✅ データ取得成功")
-            return response.text
+            print(f"✅ 静的HTMLデータ取得成功")
+            
+            # 今日の日付が含まれているかチェック
+            today, _ = self.get_jst_today()
+            if today in response.text:
+                print(f"✅ 今日のデータ ({today}) が静的HTMLに含まれています")
+                return response.text
+            else:
+                print(f"⚠️ 今日のデータ ({today}) が静的HTMLに見つかりません")
+                print("🚀 動的取得（JavaScript実行）を試行します...")
+                return self.fetch_dynamic_schedule_data()
             
         except Exception as e:
-            print(f"❌ データ取得失敗: {e}")
+            print(f"❌ 静的HTML取得失敗: {e}")
+            print("🚀 動的取得（JavaScript実行）を試行します...")
+            return self.fetch_dynamic_schedule_data()
+    
+    def fetch_dynamic_schedule_data(self):
+        """Puppeteerで動的HTMLを取得（フォールバック）"""
+        try:
+            import asyncio
+            return asyncio.run(self._fetch_with_puppeteer())
+        except ImportError:
+            print("❌ Puppeteerがインストールされていません")
+            print("💡 requirements.txtにpyppeteerを追加してください")
+            return None
+        except Exception as e:
+            print(f"❌ 動的取得も失敗: {e}")
+            return None
+    
+    async def _fetch_with_puppeteer(self):
+        """Puppeteerでブラウザを使用してHTMLを取得"""
+        from pyppeteer import launch
+        browser = None
+        try:
+            print("🚀 ブラウザを起動してJavaScript実行後のHTMLを取得中...")
+            
+            # Puppeteer設定
+            launch_options = {
+                'headless': True,
+                'args': [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--no-first-run',
+                    '--single-process'
+                ]
+            }
+            
+            # CI環境での実行可能パス設定
+            if os.environ.get('PUPPETEER_EXECUTABLE_PATH'):
+                launch_options['executablePath'] = os.environ.get('PUPPETEER_EXECUTABLE_PATH')
+            
+            browser = await launch(launch_options)
+            page = await browser.newPage()
+            
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+            
+            await page.goto('https://minorin.jp/wnl/caster.cgi', {
+                'waitUntil': 'networkidle2',
+                'timeout': 30000
+            })
+            
+            # JavaScript実行完了を待つ
+            await asyncio.sleep(3)
+            
+            html_content = await page.content()
+            await browser.close()
+            browser = None
+            
+            print("✅ 動的HTML取得成功")
+            return html_content
+            
+        except Exception as e:
+            if browser:
+                try:
+                    await browser.close()
+                except:
+                    pass
+            print(f"❌ 動的HTML取得失敗: {e}")
             return None
     
     def find_today_schedule(self, html_content):
