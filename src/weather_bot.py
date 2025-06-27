@@ -122,35 +122,30 @@ class WeatherNewsBot:
             return {}
     
     def extract_caster_name(self, caster_info):
-        """キャスター名を抽出（エンコーディング問題対応）"""
+        """キャスター名を抽出（1行目のみ、気象予報士は除外）"""
         if not caster_info:
             return "未定"
         
         try:
-            # デバッグ用：元データを出力
-            print(f"🔍 元データ: {repr(caster_info)}")
-            
-            # 文字エンコーディング修復を試行
+            # 文字エンコーディング修復
             fixed_text = caster_info
-            
-            # ISO-8859-1でエンコードされた文字をUTF-8として再デコード
             try:
                 if isinstance(caster_info, str):
-                    # str → bytes → str でエンコーディング修復
                     bytes_data = caster_info.encode('iso-8859-1')
                     fixed_text = bytes_data.decode('utf-8')
-                    print(f"🔍 修復後: {repr(fixed_text)}")
             except (UnicodeDecodeError, UnicodeEncodeError):
-                print(f"🔍 エンコーディング修復失敗、元データを使用")
                 fixed_text = caster_info
             
-            # 改行で分割して1行目を取得
+            print(f"🔍 修復後データ: {repr(fixed_text)}")
+            
+            # 改行で分割して1行目のみ取得
             lines = fixed_text.strip().split('\n')
-            print(f"🔍 分割後の行数: {len(lines)}")
+            print(f"🔍 全行: {[repr(line) for line in lines]}")
             
             if not lines:
                 return "未定"
             
+            # 1行目を取得
             first_line = lines[0].strip()
             print(f"🔍 1行目: {repr(first_line)}")
             
@@ -161,18 +156,24 @@ class WeatherNewsBot:
             cleaned_name = re.sub(r'[()（）].*', '', first_line).strip()
             print(f"🔍 注釈除去後: {repr(cleaned_name)}")
             
-            # 空白で分割（複数名の場合は最初の名前）
-            names = re.split(r'[　\s]+', cleaned_name)
-            valid_names = [name for name in names if name.strip() and len(name) >= 2]
-            print(f"🔍 有効な名前: {valid_names}")
+            # ここが重要：複数の名前が含まれている場合の処理
+            # よくあるパターン：「小林李衣奈山口剛央」→「小林李衣奈」と「山口剛央」
             
-            if valid_names:
-                caster_name = valid_names[0]
-                print(f"🔍 最終的な名前: {repr(caster_name)}")
-                
-                # 基本的な長さチェック（10文字以内）
-                if len(caster_name) <= 10:
-                    return caster_name
+            # 既知の気象予報士名リスト（2行目に現れる人）
+            weather_forecasters = [
+                "山口剛央", "飯島栄一", "宇野沢達也", "本田竜也"
+            ]
+            
+            # 気象予報士名を除去
+            for forecaster in weather_forecasters:
+                if forecaster in cleaned_name:
+                    cleaned_name = cleaned_name.replace(forecaster, "").strip()
+                    print(f"🔍 気象予報士除去後: {repr(cleaned_name)}")
+            
+            # 残った名前が有効かチェック
+            if cleaned_name and len(cleaned_name) >= 2 and len(cleaned_name) <= 10:
+                print(f"🔍 最終キャスター名: {repr(cleaned_name)}")
+                return cleaned_name
             
             return "未定"
             
