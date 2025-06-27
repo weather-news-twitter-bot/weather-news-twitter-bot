@@ -66,7 +66,7 @@ class WeatherNewsBot:
             return None
     
     def parse_schedule(self, html_content):
-        """HTMLから番組表を解析"""
+        """HTMLから番組表を解析（HTML構造を詳しく調査）"""
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             schedule_data = {}
@@ -93,10 +93,26 @@ class WeatherNewsBot:
                             ("20:00", "ムーン")
                         ]
                         
+                        # デバッグ用：今日の分だけHTMLの詳細構造を確認
+                        today = datetime.now().strftime("%Y-%m-%d")
+                        if current_date == today:
+                            print(f"🔍 {current_date} のHTML構造詳細調査:")
+                            for i, (time_slot, program) in enumerate(time_slots):
+                                if i + 1 < len(cells):
+                                    cell = cells[i + 1]
+                                    print(f"🔍 {time_slot} {program} セル:")
+                                    print(f"    HTML: {cell}")
+                                    print(f"    innerHTML: {cell.encode_contents()}")
+                                    print(f"    get_text(): {repr(cell.get_text())}")
+                                    print(f"    get_text(separator='|'): {repr(cell.get_text(separator='|'))}")
+                                    print(f"    子要素: {[str(child) for child in cell.children]}")
+                                    print("    ---")
+                        
                         for i, (time_slot, program) in enumerate(time_slots):
                             if i + 1 < len(cells):
+                                # 現在の方法でキャスター情報を抽出
                                 caster_info = cells[i + 1].get_text(strip=True)
-                                caster_name = self.extract_caster_name(caster_info)
+                                caster_name = self.extract_caster_name_new(cells[i + 1])
                                 day_schedule[time_slot] = {
                                     "program": program,
                                     "caster": caster_name
@@ -111,6 +127,65 @@ class WeatherNewsBot:
         except Exception as e:
             print(f"❌ 番組表解析エラー: {e}")
             return {}
+    
+    def extract_caster_name_new(self, cell):
+        """新しいキャスター名抽出方法（HTML構造を考慮）"""
+        try:
+            # 方法1: 子要素を個別に確認
+            children = list(cell.children)
+            if children:
+                first_child = children[0]
+                if hasattr(first_child, 'strip'):
+                    # テキストノードの場合
+                    first_text = first_child.strip()
+                    if first_text:
+                        return self.clean_caster_name(first_text)
+                elif hasattr(first_child, 'get_text'):
+                    # 要素ノードの場合
+                    first_text = first_child.get_text(strip=True)
+                    if first_text:
+                        return self.clean_caster_name(first_text)
+            
+            # 方法2: 改行区切りでテキストを取得
+            text_with_separators = cell.get_text(separator='|', strip=True)
+            if '|' in text_with_separators:
+                parts = text_with_separators.split('|')
+                if parts[0].strip():
+                    return self.clean_caster_name(parts[0].strip())
+            
+            # 方法3: 従来の方法
+            raw_text = cell.get_text(strip=True)
+            return self.extract_caster_name(raw_text)
+            
+        except Exception as e:
+            return "未定"
+    
+    def clean_caster_name(self, name):
+        """キャスター名をクリーンアップ"""
+        if not name:
+            return "未定"
+        
+        # 文字エンコーディング修復
+        try:
+            if isinstance(name, str):
+                bytes_data = name.encode('iso-8859-1')
+                name = bytes_data.decode('utf-8')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            pass
+        
+        # 気象予報士名を除去
+        forecasters = ["山口剛央", "飯島栄一", "宇野沢達也", "本田竜也", "芳野達郎"]
+        for forecaster in forecasters:
+            name = name.replace(forecaster, "").strip()
+        
+        # クロス関連を除去
+        name = re.sub(r'[()（）]*クロス[()（）]*', '', name).strip()
+        
+        # 有効性チェック
+        if name and len(name) >= 2 and len(name) <= 10:
+            return name
+        
+        return "未定"
     
     def extract_caster_name(self, caster_info):
         """キャスター名を抽出（1行目のみ、確実に）"""
