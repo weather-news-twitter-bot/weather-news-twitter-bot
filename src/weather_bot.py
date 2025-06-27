@@ -113,24 +113,41 @@ class WeatherNewsBot:
             return "未定"
         
         try:
+            # デバッグ用：元データを出力
+            print(f"🔍 元データ: {repr(caster_info)}")
+            
             # 改行で分割して1行目を取得
             lines = caster_info.strip().split('\n')
+            print(f"🔍 分割後の行数: {len(lines)}")
+            
             if not lines:
                 return "未定"
             
             first_line = lines[0].strip()
+            print(f"🔍 1行目: {repr(first_line)}")
+            
             if not first_line:
                 return "未定"
             
             # (クロス)などの注釈を除去
             cleaned_name = re.sub(r'[()（）].*', '', first_line).strip()
+            print(f"🔍 注釈除去後: {repr(cleaned_name)}")
             
             # 空白や特殊文字で分割（複数名の場合は最初の名前）
             names = re.split(r'[　\s]+', cleaned_name)
             valid_names = [name for name in names if name.strip() and len(name) >= 2]
+            print(f"🔍 有効な名前: {valid_names}")
             
             if valid_names:
                 caster_name = valid_names[0]
+                print(f"🔍 最終的な名前: {repr(caster_name)}")
+                
+                # 文字化けチェック（簡単な方法）
+                # 文字化けした文字が含まれているかチェック
+                if any(char in caster_name for char in ['å', 'ã', 'ç', 'æ', 'è', 'é', 'ê', 'ë']):
+                    print(f"🔍 文字化け検出: {caster_name}")
+                    return "未定"
+                
                 # 基本的な長さチェックのみ（10文字以内）
                 if len(caster_name) <= 10:
                     return caster_name
@@ -138,7 +155,7 @@ class WeatherNewsBot:
             return "未定"
             
         except Exception as e:
-            print(f"キャスター名抽出エラー: {e}, 元データ: {caster_info}")
+            print(f"❌ キャスター名抽出エラー: {e}, 元データ: {repr(caster_info)}")
             return "未定"
     
     def get_current_time_slot(self):
