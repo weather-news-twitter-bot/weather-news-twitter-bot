@@ -39,6 +39,7 @@ class DynamicWeatherNewsBot:
     
     async def fetch_dynamic_schedule_data(self):
         """動的HTML取得（JavaScript実行後）"""
+        browser = None
         try:
             print("🚀 ブラウザを起動してJavaScript実行後のHTMLを取得中...")
             
@@ -85,35 +86,52 @@ class DynamicWeatherNewsBot:
                 # JavaScript実行後のHTMLを取得
                 html_content = await page.content()
                 
+                await browser.close()
+                browser = None
+                
+                if html_content:
+                    print("✅ 動的HTML取得成功")
+                    print(f"🔍 HTMLサイズ: {len(html_content)}文字")
+                    return html_content
+                
             except Exception as e:
                 print(f"⚠️ 動的取得失敗、通常のHTTP取得にフォールバック: {e}")
+                if browser:
+                    await browser.close()
+                    browser = None
                 # フォールバック: 通常のHTTP取得
-                html_content = await self.fetch_static_schedule_data()
-            
-            await browser.close()
-            
-            if html_content:
-                print("✅ HTML取得成功")
-                print(f"🔍 HTMLサイズ: {len(html_content)}文字")
-                return html_content
-            else:
-                return None
+                return await self.fetch_static_schedule_data()
             
         except Exception as e:
             print(f"❌ 動的HTML取得失敗: {e}")
+            if browser:
+                try:
+                    await browser.close()
+                except:
+                    pass
             # フォールバック: 通常のHTTP取得
             return await self.fetch_static_schedule_data()
+        
+        return None
     
     async def fetch_static_schedule_data(self):
         """通常のHTTP取得（フォールバック）"""
         try:
             print("📡 通常のHTTP取得を試行中...")
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
             }
             
             response = requests.get('https://minorin.jp/wnl/caster.cgi', headers=headers, timeout=30)
             response.raise_for_status()
+            
+            # エンコーディングを明示的に設定
+            response.encoding = 'utf-8'
             
             print("✅ 静的HTML取得成功")
             return response.text
@@ -256,16 +274,38 @@ class DynamicWeatherNewsBot:
         
         # 文字エンコーディング修復
         try:
+            # まず UTF-8 として処理を試行
             if isinstance(name, str):
                 # 一般的な文字化け修復を試行
                 name = name.replace('â€™', "'").replace('â€œ', '"').replace('â€', '"')
-        except:
+                
+                # 日本語の文字化けパターンを修復
+                if 'ã' in name or 'æ' in name or 'ç' in name:
+                    try:
+                        # ISO-8859-1でエンコードしてUTF-8でデコード
+                        bytes_data = name.encode('iso-8859-1')
+                        name = bytes_data.decode('utf-8')
+                    except (UnicodeDecodeError, UnicodeEncodeError):
+                        # 修復できない場合は元の文字列を使用
+                        pass
+                
+        except Exception:
             pass
         
         name = name.strip()
         
-        # 適切な長さの名前かチェック
-        if name and len(name) >= 2 and len(name) <= 10:
+        # 日本語文字が含まれているかチェック
+        has_japanese = any('\u3040' <= char <= '\u309F' or  # ひらがな
+                          '\u30A0' <= char <= '\u30FF' or  # カタカナ
+                          '\u4E00' <= char <= '\u9FAF'     # 漢字
+                          for char in name)
+        
+        # 適切な長さの名前で、日本語が含まれている場合
+        if name and len(name) >= 2 and len(name) <= 10 and has_japanese:
+            return name
+        
+        # 英数字のみの場合も許可（一部キャスターは英語名）
+        if name and len(name) >= 2 and len(name) <= 15 and name.replace(' ', '').isalnum():
             return name
         
         return "未定"
@@ -368,16 +408,22 @@ async def main():
         
         if success:
             print("\n🎉 番組表ツイートが正常に完了しました!")
-            sys.exit(0)
         else:
             print("\n💥 ツイート処理中にエラーが発生しました")
-            sys.exit(1)
             
     except Exception as e:
         print(f"\n💥 予期しないエラー: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
+    
+    # プログラム終了前に少し待機
+    await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print(f"Asyncio error: {e}")
+    finally:
+        # 確実にプログラムを終了
+        sys.exit(0)
