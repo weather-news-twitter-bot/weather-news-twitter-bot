@@ -113,7 +113,7 @@ class WeatherNewsBot:
             return {}
     
     def extract_caster_name(self, caster_info):
-        """キャスター名を抽出（1行目のみ、気象予報士は除外）"""
+        """キャスター名を抽出（1行目のみ、確実に）"""
         if not caster_info:
             return "未定"
         
@@ -127,31 +127,53 @@ class WeatherNewsBot:
             except (UnicodeDecodeError, UnicodeEncodeError):
                 fixed_text = caster_info
             
-            # 改行で分割して1行目のみ取得
-            lines = fixed_text.strip().split('\n')
-            if not lines:
-                return "未定"
+            # 複数の改行パターンで分割を試行
+            lines = []
+            for separator in ['\n', '\r\n', '\r', '<br>', '<BR>']:
+                if separator in fixed_text:
+                    lines = fixed_text.split(separator)
+                    break
+            
+            # 改行が見つからない場合は、既知のパターンで分割
+            if not lines or len(lines) == 1:
+                # 既知の気象予報士名で分割
+                forecasters = ["山口剛央", "飯島栄一", "宇野沢達也", "本田竜也", "芳野達郎"]
+                text_to_split = fixed_text
+                
+                for forecaster in forecasters:
+                    if forecaster in text_to_split:
+                        # 気象予報士名の直前で分割
+                        parts = text_to_split.split(forecaster)
+                        if parts[0].strip():
+                            lines = [parts[0].strip()]
+                            break
+                
+                # まだ分割できていない場合は、「クロス」で分割
+                if not lines or len(lines) == 1:
+                    if "クロス" in text_to_split:
+                        parts = text_to_split.split("クロス")
+                        if parts[0].strip():
+                            lines = [parts[0].strip()]
+                    elif "(クロス)" in text_to_split:
+                        parts = text_to_split.split("(クロス)")
+                        if parts[0].strip():
+                            lines = [parts[0].strip()]
             
             # 1行目を取得
-            first_line = lines[0].strip()
-            if not first_line:
-                return "未定"
-            
-            # (クロス)などの注釈を除去
-            cleaned_name = re.sub(r'[()（）].*', '', first_line).strip()
-            
-            # 既知の気象予報士名を除去
-            weather_forecasters = [
-                "山口剛央", "飯島栄一", "宇野沢達也", "本田竜也"
-            ]
-            
-            for forecaster in weather_forecasters:
-                if forecaster in cleaned_name:
-                    cleaned_name = cleaned_name.replace(forecaster, "").strip()
-            
-            # 残った名前が有効かチェック
-            if cleaned_name and len(cleaned_name) >= 2 and len(cleaned_name) <= 10:
-                return cleaned_name
+            if lines and lines[0].strip():
+                first_line = lines[0].strip()
+                
+                # さらに念のため、気象予報士名とクロスを除去
+                forecasters = ["山口剛央", "飯島栄一", "宇野沢達也", "本田竜也", "芳野達郎"]
+                for forecaster in forecasters:
+                    first_line = first_line.replace(forecaster, "").strip()
+                
+                # クロス関連の文字を除去
+                first_line = re.sub(r'[()（）]*クロス[()（）]*', '', first_line).strip()
+                
+                # 有効な名前かチェック
+                if first_line and len(first_line) >= 2 and len(first_line) <= 10:
+                    return first_line
             
             return "未定"
             
@@ -246,16 +268,16 @@ class WeatherNewsBot:
                 return True
             else:
                 print("❌ ツイート失敗: レスポンスデータなし")
-                return True
+                return False
                 
         except tweepy.Forbidden as e:
             print(f"❌ 権限エラー: {e}")
             if hasattr(e, 'response') and e.response:
                 print(f"❌ エラー詳細: {e.response.text}")
-            return True
+            return False
         except Exception as e:
             print(f"❌ エラー: {e}")
-            return True
+            return False
     
     def run_schedule_tweet(self):
         """番組表ツイートを実行"""
