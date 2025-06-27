@@ -1,4 +1,50 @@
-# src/weather_bot.py
+    def format_schedule_tweet(self, schedule_data, target_date=None):
+        """最新の利用可能な日付で番組表を生成"""
+        if not target_date:
+            target_date = datetime.now().strftime("%Y-%m-%d")
+        
+        print(f"🔍 希望日付: {target_date}")
+        print(f"🔍 利用可能な日付: {sorted(schedule_data.keys())}")
+        
+        # 対象日付のデータが見つからない場合、最新の日付を使用
+        if target_date not in schedule_data:
+            print(f"⚠️ {target_date} の番組表が見つかりません")
+            
+            # 利用可能な日付で最新の日を探す
+            available_dates = sorted(schedule_data.keys(), reverse=True)  # 降順ソート
+            if available_dates:
+                latest_date = available_dates[0]
+                print(f"📅 最新の利用可能な日付 {latest_date} を使用します")
+                target_date = latest_date
+            else:
+                print("❌ 利用可能なデータがありません")
+                return None
+        
+        day_schedule = schedule_data[target_date]
+        
+        # 日付情報の整形
+        date_obj = datetime.strptime(target_date, "%Y-%m-%d")
+        date_str = date_obj.strftime("%m/%d")
+        weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+        weekday = weekdays[date_obj.weekday()]
+        
+        # 実際の今日の日付と異なる場合は注記を追加
+        today = datetime.now().strftime("%Y-%m-%d")
+        date_note = ""
+        if target_date != today:
+            date_note = f" (最新データ)"
+        
+        # 5:00から20:00まで3時間毎の番組表
+        target_slots = ["05:00", "08:00", "11:00", "14:00", "17:00", "20:00"]
+        schedule_lines = []
+        
+        for time_slot in target_slots:
+            if time_slot in day_schedule:
+                program = day_schedule[time_slot]["program"]
+                caster = day_schedule[time_slot]["caster"]
+                # "他日"や"未取得"の場合は"未定"に変更
+                if caster in ["他日", "未取得", ""]:
+                    caster = "未定# src/weather_bot.py
 import tweepy
 import os
 import sys
@@ -66,24 +112,53 @@ class WeatherNewsBot:
             return None
     
     def parse_schedule(self, html_content):
-        """HTMLから番組表を解析（HTML構造を詳しく調査）"""
+        """HTMLから番組表を解析（テーブル構造を詳しく調査）"""
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             schedule_data = {}
             
+            # 現在の日付を取得
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            print(f"🔍 解析対象日: {today}")
+            
+            # テーブルの全ての行を取得
             rows = soup.find_all('tr')
             print(f"📊 {len(rows)}行のデータを解析中...")
             
-            for row in rows:
+            # 各行の詳細を確認
+            for row_index, row in enumerate(rows):
                 cells = row.find_all('td')
-                if len(cells) >= 7:
-                    date_text = cells[0].get_text(strip=True)
-                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', date_text)
+                if len(cells) > 0:
+                    # 最初のセルの内容を確認
+                    first_cell_text = cells[0].get_text(strip=True)
+                    
+                    # 日付が含まれているかチェック
+                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', first_cell_text)
                     
                     if date_match:
                         current_date = date_match.group(1)
-                        day_schedule = {}
+                        print(f"🔍 行 {row_index}: 日付 {current_date} を発見")
+                        print(f"🔍 セル数: {len(cells)}")
                         
+                        # 今日の日付の場合、詳細を表示
+                        if current_date == today:
+                            print(f"✅ 今日のデータ ({current_date}) を発見！")
+                            print(f"🔍 最初のセル: {repr(first_cell_text)}")
+                            
+                            # 各セルの内容を確認
+                            for i, cell in enumerate(cells):
+                                cell_text = cell.get_text(strip=True)
+                                cell_html = str(cell)
+                                print(f"🔍 セル {i}: テキスト='{cell_text}', HTML={cell_html[:200]}...")
+                                
+                                # セパレーター付きテキストも確認
+                                cell_sep_text = cell.get_text(separator='|', strip=True)
+                                if '|' in cell_sep_text:
+                                    print(f"🔍 セル {i} セパレーター: '{cell_sep_text}'")
+                        
+                        # 番組表データを構築
+                        day_schedule = {}
                         time_slots = [
                             ("05:00", "モーニング"),
                             ("08:00", "サンシャイン"),
@@ -93,26 +168,19 @@ class WeatherNewsBot:
                             ("20:00", "ムーン")
                         ]
                         
-                        # デバッグ用：今日の分だけHTMLの詳細構造を確認
-                        today = datetime.now().strftime("%Y-%m-%d")
-                        if current_date == today:
-                            print(f"🔍 {current_date} のHTML構造詳細調査:")
-                            for i, (time_slot, program) in enumerate(time_slots):
-                                if i + 1 < len(cells):
-                                    cell = cells[i + 1]
-                                    print(f"🔍 {time_slot} {program} セル:")
-                                    print(f"    HTML: {cell}")
-                                    print(f"    innerHTML: {cell.encode_contents()}")
-                                    print(f"    get_text(): {repr(cell.get_text())}")
-                                    print(f"    get_text(separator='|'): {repr(cell.get_text(separator='|'))}")
-                                    print(f"    子要素: {[str(child) for child in cell.children]}")
-                                    print("    ---")
-                        
+                        # 各時間帯のデータを抽出
                         for i, (time_slot, program) in enumerate(time_slots):
                             if i + 1 < len(cells):
-                                # 現在の方法でキャスター情報を抽出
-                                caster_info = cells[i + 1].get_text(strip=True)
-                                caster_name = self.extract_caster_name_new(cells[i + 1])
+                                cell = cells[i + 1]
+                                
+                                if current_date == today:
+                                    # 今日の場合は詳細抽出
+                                    caster_name = self.extract_caster_name_new(cell)
+                                    print(f"🔍 {time_slot} {program}: '{caster_name}'")
+                                else:
+                                    # 他の日は簡易処理
+                                    caster_name = "他日"
+                                
                                 day_schedule[time_slot] = {
                                     "program": program,
                                     "caster": caster_name
@@ -122,6 +190,11 @@ class WeatherNewsBot:
                         print(f"📅 {current_date} の番組表を解析完了")
             
             print(f"✅ {len(schedule_data)}日分の番組表解析完了")
+            print(f"🔍 今日 ({today}) のデータが含まれています: {today in schedule_data}")
+            
+            if today in schedule_data:
+                print(f"🎉 今日のデータ詳細: {schedule_data[today]}")
+            
             return schedule_data
             
         except Exception as e:
@@ -289,31 +362,44 @@ class WeatherNewsBot:
         return closest_slot
     
     def format_schedule_tweet(self, schedule_data, target_date=None):
-        """実行日の5:00-20:00の3時間毎キャスター表を生成"""
+        """実行日の5:00-20:00の3時間毎キャスター表を生成（フォールバック対応）"""
         if not target_date:
             target_date = datetime.now().strftime("%Y-%m-%d")
         
         print(f"🔍 対象日付: {target_date}")
         print(f"🔍 利用可能な日付: {list(schedule_data.keys())}")
         
+        # 対象日付のデータが見つからない場合、最新の日付を使用
         if target_date not in schedule_data:
-            print(f"❌ {target_date} の番組表が見つかりません")
-            # 利用可能な日付で最も近い日を探す
-            available_dates = sorted(schedule_data.keys())
+            print(f"⚠️ {target_date} の番組表が見つかりません")
+            
+            # 利用可能な日付で最新の日を探す
+            available_dates = sorted(schedule_data.keys(), reverse=True)  # 降順ソート
             if available_dates:
-                target_date = available_dates[0]  # とりあえず最初の日付を使用
-                print(f"📅 代替として {target_date} を使用します")
+                latest_date = available_dates[0]
+                print(f"📅 最新の利用可能な日付 {latest_date} を使用します")
+                target_date = latest_date
             else:
+                print("❌ 利用可能なデータがありません")
                 return None
         
         day_schedule = schedule_data[target_date]
-        print(f"🔍 {target_date} の番組データ: {day_schedule}")
+        print(f"🔍 使用する日付: {target_date}")
         
         # 日付情報の整形
         date_obj = datetime.strptime(target_date, "%Y-%m-%d")
         date_str = date_obj.strftime("%m/%d")
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         weekday = weekdays[date_obj.weekday()]
+        
+        # 実際の今日の日付と異なる場合は注記を追加
+        today = datetime.now().strftime("%Y-%m-%d")
+        date_note = ""
+        if target_date != today:
+            today_obj = datetime.strptime(today, "%Y-%m-%d")
+            today_str = today_obj.strftime("%m/%d")
+            today_weekday = weekdays[today_obj.weekday()]
+            date_note = f" (最新データ)"
         
         # 5:00から20:00まで3時間毎の番組表
         target_slots = ["05:00", "08:00", "11:00", "14:00", "17:00", "20:00"]
@@ -332,8 +418,8 @@ class WeatherNewsBot:
         
         schedule_text = "\n".join(schedule_lines)
         
-        # シンプルな番組表ツイート
-        tweet_text = f"""📺 {date_str}({weekday}) WNL番組表
+        # 番組表ツイート
+        tweet_text = f"""📺 {date_str}({weekday}) WNL番組表{date_note}
 
 {schedule_text}
 
@@ -368,24 +454,31 @@ class WeatherNewsBot:
             return False
     
     def run_schedule_tweet(self):
-        """番組表ツイートを実行"""
+        """番組表ツイートを実行（動的に今日の日付を使用）"""
         print("🚀 番組表ツイート実行開始")
+        
+        # 現在の日付を取得
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        print(f"🗓️ 現在の日時: {now.strftime('%Y/%m/%d %H:%M:%S')}")
+        print(f"🗓️ 対象日付: {today}")
         
         # 番組表データを取得
         html_content = self.fetch_schedule_data()
         if not html_content:
             return False
         
-        # データを解析
+        # データを解析（今日の日付を指定）
         schedule_data = self.parse_schedule(html_content)
         if not schedule_data:
             return False
         
         # 今日の番組表ツイートを生成
-        today = datetime.now().strftime("%Y-%m-%d")
         tweet_text = self.format_schedule_tweet(schedule_data, today)
         
         if not tweet_text:
+            print(f"❌ {today} の番組表データが見つかりませんでした")
+            print(f"🔍 利用可能な日付: {list(schedule_data.keys())}")
             return False
         
         # ツイート投稿
