@@ -114,6 +114,7 @@ jobs:
         PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       run: |
         echo "🔍 サイト構造をデバッグモードで調査します..."
+        cd src
         python weather_bot.py
     
     - name: Post weather news schedule tweet
@@ -127,4 +128,5 @@ jobs:
         PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       run: |
         echo "📤 実際にツイートを投稿します..."
+        cd src
         python weather_bot.py
