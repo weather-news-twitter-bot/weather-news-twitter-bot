@@ -293,11 +293,21 @@ class WeatherNewsBot:
         if not target_date:
             target_date = datetime.now().strftime("%Y-%m-%d")
         
+        print(f"🔍 対象日付: {target_date}")
+        print(f"🔍 利用可能な日付: {list(schedule_data.keys())}")
+        
         if target_date not in schedule_data:
             print(f"❌ {target_date} の番組表が見つかりません")
-            return None
+            # 利用可能な日付で最も近い日を探す
+            available_dates = sorted(schedule_data.keys())
+            if available_dates:
+                target_date = available_dates[0]  # とりあえず最初の日付を使用
+                print(f"📅 代替として {target_date} を使用します")
+            else:
+                return None
         
         day_schedule = schedule_data[target_date]
+        print(f"🔍 {target_date} の番組データ: {day_schedule}")
         
         # 日付情報の整形
         date_obj = datetime.strptime(target_date, "%Y-%m-%d")
@@ -314,9 +324,11 @@ class WeatherNewsBot:
                 program = day_schedule[time_slot]["program"]
                 caster = day_schedule[time_slot]["caster"]
                 schedule_lines.append(f"{time_slot} {program}: {caster}")
+                print(f"🔍 {time_slot} {program}: {caster}")
             else:
                 # 番組がない場合
                 schedule_lines.append(f"{time_slot} --: 未定")
+                print(f"🔍 {time_slot} データなし")
         
         schedule_text = "\n".join(schedule_lines)
         
