@@ -233,23 +233,97 @@ class WeatherNewsBot:
             
             # 文字化け修復
             fixed_text = self.fix_encoding(cell_text)
+            print(f"   セル内容: '{fixed_text}'")
             
-            # 改行で分割して最初の有効な名前を取得
+            # 複数の方法でキャスター名を抽出
+            candidates = []
+            
+            # 方法1: 改行で分割
             lines = fixed_text.split('\n')
             for line in lines:
                 line = line.strip()
-                if self.is_valid_caster_name(line):
-                    return line
+                if line and self.is_valid_caster_name(line):
+                    candidates.append(line)
             
-            # 全体のテキストが有効な名前かチェック
-            if self.is_valid_caster_name(fixed_text):
-                return fixed_text
+            # 方法2: HTMLタグ別に抽出
+            for tag_name in ['div', 'span', 'p']:
+                elements = cell.find_all(tag_name)
+                for elem in elements:
+                    elem_text = self.fix_encoding(elem.get_text(strip=True))
+                    if elem_text and self.is_valid_caster_name(elem_text):
+                        candidates.append(elem_text)
             
+            # 方法3: 複数名前の分離（新機能）
+            if fixed_text and len(fixed_text) > 6:  # 長い文字列の場合のみ
+                separated_names = self.separate_multiple_names(fixed_text)
+                for name in separated_names:
+                    if self.is_valid_caster_name(name):
+                        candidates.append(name)
+            
+            # 方法4: 連続する日本語文字を抽出
+            current_name = ""
+            for char in fixed_text:
+                if '\u3040' <= char <= '\u309F' or '\u30A0' <= char <= '\u30FF' or '\u4E00' <= char <= '\u9FAF':
+                    current_name += char
+                else:
+                    if current_name and self.is_valid_caster_name(current_name):
+                        candidates.append(current_name)
+                    current_name = ""
+            
+            # 最後の名前も追加
+            if current_name and self.is_valid_caster_name(current_name):
+                candidates.append(current_name)
+            
+            # 最適な候補を選択
+            if candidates:
+                # 重複を除去し、最初の候補を返す
+                unique_candidates = list(dict.fromkeys(candidates))
+                
+                # 長さでソート（短い名前を優先 = 単一の名前を優先）
+                unique_candidates.sort(key=len)
+                
+                best_candidate = unique_candidates[0]
+                
+                if len(unique_candidates) > 1:
+                    print(f"   候補: {unique_candidates} → 選択: '{best_candidate}'")
+                else:
+                    print(f"   抽出: '{best_candidate}'")
+                
+                return best_candidate
+            
+            print("   → 未定")
             return "未定"
             
         except Exception as e:
             print(f"名前抽出エラー: {e}")
             return "未定"
+    
+    def separate_multiple_names(self, text):
+        """複数の名前が結合している場合に分離を試行"""
+        names = []
+        
+        # パターン1: よくある名字で分割
+        common_surnames = ['山岸', '江川', '松雪', '白井', '駒木', '戸北', '小林', '川畑', '魚住', '小川', '岡本', '青原', '福吉', '山口', '内藤', '宇野沢', '森田']
+        
+        for surname in common_surnames:
+            if surname in text:
+                parts = text.split(surname)
+                if len(parts) >= 2:
+                    # 名字+名前の組み合わせを復元
+                    for i in range(1, len(parts)):
+                        if parts[i]:
+                            potential_name = surname + parts[i][:2]  # 名字+名前2文字
+                            if len(potential_name) <= 6:  # 妥当な長さ
+                                names.append(potential_name)
+        
+        # パターン2: 3-4文字ずつ分割
+        if len(text) >= 6 and not names:
+            for i in range(0, len(text), 3):
+                chunk = text[i:i+4]  # 3-4文字ずつ
+                if len(chunk) >= 3:
+                    names.append(chunk)
+        
+        return names
     
     def fix_encoding(self, text):
         """文字エンコーディングの修復"""
@@ -274,8 +348,12 @@ class WeatherNewsBot:
             return text
     
     def is_valid_caster_name(self, text):
-        """有効なキャスター名かチェック"""
-        if not text or len(text) < 2 or len(text) > 15:
+        """有効なキャスター名かチェック（バランス重視）"""
+        if not text or len(text) < 2:
+            return False
+        
+        # 長すぎる場合は除外（ただし余裕を持たせる）
+        if len(text) > 12:  # 8→12に緩和
             return False
         
         # 日本語文字が含まれているかチェック
@@ -287,15 +365,22 @@ class WeatherNewsBot:
         if not has_japanese:
             return False
         
-        # 除外パターン
+        # 明らかに除外すべきパターンのみ（最小限に）
         exclude_patterns = [
-            '時', '分', ':', 'AM', 'PM', '表示', '日間', '曜日', '(', ')',
-            'モーニング', 'サンシャイン', 'コーヒータイム', 'アフタヌーン', 'イブニング', 'ムーン'
+            'モーニング', 'サンシャイン', 'コーヒータイム', 'アフタヌーン', 'イブニング', 'ムーン',  # 番組名
+            '2025-', '202', '時間表示', '日間表示',  # 明らかに番組表関連
+            '(', ')', '![]', 'http',  # HTML/記号
         ]
         
-        if any(pattern in text for pattern in exclude_patterns):
+        # 完全一致する除外パターンのみチェック
+        if any(text == pattern or pattern in text for pattern in exclude_patterns):
             return False
         
+        # 数字のみや記号のみの場合は除外
+        if text.isdigit() or text in ['-', '−', '・', '×', '○', '未定']:
+            return False
+        
+        # 基本的に日本語が含まれていれば有効とする（寛容な判定）
         return True
     
     def format_schedule_tweet(self, schedule_data):
