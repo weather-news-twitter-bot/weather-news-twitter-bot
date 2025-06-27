@@ -108,38 +108,37 @@ class WeatherNewsBot:
             return {}
     
     def extract_caster_name(self, caster_info):
-        """キャスター名を抽出（文字化け対策）"""
+        """キャスター名を抽出（1行目がキャスター、2行目が気象予報士）"""
         if not caster_info:
             return "未定"
         
-        # 文字化けや特殊文字を含む場合は「未定」とする
         try:
-            # 日本語文字かチェック
-            clean_text = caster_info.strip()
-            # ASCII以外の文字で文字化けしていないかチェック
-            if any(ord(char) > 127 for char in clean_text):
-                # 日本語の範囲外の文字が含まれている場合
-                if not all(0x3040 <= ord(char) <= 0x309F or  # ひらがな
-                          0x30A0 <= ord(char) <= 0x30FF or  # カタカナ  
-                          0x4E00 <= ord(char) <= 0x9FAF or  # 漢字
-                          ord(char) in [0x3000, 0x3001, 0x3002] or  # 句読点
-                          char.isascii() or char.isspace() or char in "()（）"
-                          for char in clean_text):
-                    return "未定"
+            # 改行で分割して1行目を取得
+            lines = caster_info.strip().split('\n')
+            if not lines:
+                return "未定"
             
-            # 改行、全角スペース、半角スペースで分割
-            names = re.split(r'[　\s\n()（）]+', clean_text)
-            # 空文字列を除去して最初の名前を取得
-            valid_names = [name for name in names if name.strip() and len(name) > 1]
+            first_line = lines[0].strip()
+            if not first_line:
+                return "未定"
+            
+            # (クロス)などの注釈を除去
+            cleaned_name = re.sub(r'[()（）].*', '', first_line).strip()
+            
+            # 空白や特殊文字で分割（複数名の場合は最初の名前）
+            names = re.split(r'[　\s]+', cleaned_name)
+            valid_names = [name for name in names if name.strip() and len(name) >= 2]
             
             if valid_names:
-                first_name = valid_names[0]
-                # さらに文字化けチェック
-                if len(first_name) > 10:  # 異常に長い場合
-                    return "未定"
-                return first_name
+                caster_name = valid_names[0]
+                # 基本的な長さチェックのみ（10文字以内）
+                if len(caster_name) <= 10:
+                    return caster_name
+            
             return "未定"
-        except:
+            
+        except Exception as e:
+            print(f"キャスター名抽出エラー: {e}, 元データ: {caster_info}")
             return "未定"
     
     def get_current_time_slot(self):
