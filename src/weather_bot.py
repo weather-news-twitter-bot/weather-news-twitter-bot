@@ -47,9 +47,6 @@ class WeatherNewsBot:
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
-                'Accept-Encoding': 'gzip, deflate',
                 'Accept-Charset': 'UTF-8'
             }
             
@@ -59,16 +56,10 @@ class WeatherNewsBot:
             
             # 文字エンコーディングを明示的に設定
             if response.encoding is None or response.encoding.lower() in ['iso-8859-1', 'ascii']:
-                # エンコーディングが正しく検出されていない場合
                 response.encoding = 'utf-8'
             
-            print(f"✅ 番組表データ取得成功 (エンコーディング: {response.encoding})")
-            
-            # エンコーディングテスト
-            content = response.text
-            print(f"🔍 コンテンツサンプル: {content[:200]}")
-            
-            return content
+            print(f"✅ 番組表データ取得成功")
+            return response.text
             
         except requests.RequestException as e:
             print(f"❌ データ取得失敗: {e}")
@@ -136,49 +127,35 @@ class WeatherNewsBot:
             except (UnicodeDecodeError, UnicodeEncodeError):
                 fixed_text = caster_info
             
-            print(f"🔍 修復後データ: {repr(fixed_text)}")
-            
             # 改行で分割して1行目のみ取得
             lines = fixed_text.strip().split('\n')
-            print(f"🔍 全行: {[repr(line) for line in lines]}")
-            
             if not lines:
                 return "未定"
             
             # 1行目を取得
             first_line = lines[0].strip()
-            print(f"🔍 1行目: {repr(first_line)}")
-            
             if not first_line:
                 return "未定"
             
             # (クロス)などの注釈を除去
             cleaned_name = re.sub(r'[()（）].*', '', first_line).strip()
-            print(f"🔍 注釈除去後: {repr(cleaned_name)}")
             
-            # ここが重要：複数の名前が含まれている場合の処理
-            # よくあるパターン：「小林李衣奈山口剛央」→「小林李衣奈」と「山口剛央」
-            
-            # 既知の気象予報士名リスト（2行目に現れる人）
+            # 既知の気象予報士名を除去
             weather_forecasters = [
                 "山口剛央", "飯島栄一", "宇野沢達也", "本田竜也"
             ]
             
-            # 気象予報士名を除去
             for forecaster in weather_forecasters:
                 if forecaster in cleaned_name:
                     cleaned_name = cleaned_name.replace(forecaster, "").strip()
-                    print(f"🔍 気象予報士除去後: {repr(cleaned_name)}")
             
             # 残った名前が有効かチェック
             if cleaned_name and len(cleaned_name) >= 2 and len(cleaned_name) <= 10:
-                print(f"🔍 最終キャスター名: {repr(cleaned_name)}")
                 return cleaned_name
             
             return "未定"
             
         except Exception as e:
-            print(f"❌ キャスター名抽出エラー: {e}, 元データ: {repr(caster_info)}")
             return "未定"
     
     def get_current_time_slot(self):
