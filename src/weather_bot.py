@@ -152,12 +152,21 @@ class WeatherNewsBot:
         return closest_slot
     
     def format_schedule_tweet(self, schedule_data, target_date=None):
-        """シンプルなツイート文を生成（最小テストボットの成功例を参考）"""
+        """詳細な番組表ツイート文を生成（成功パターンを維持）"""
         if not target_date:
             target_date = datetime.now().strftime("%Y-%m-%d")
         
+        if target_date not in schedule_data:
+            print(f"❌ {target_date} の番組表が見つかりません")
+            return None
+        
+        day_schedule = schedule_data[target_date]
+        
         # 現在の番組情報を取得
         current_time, current_program = self.get_current_time_slot()
+        current_caster = "不明"
+        if current_time in day_schedule:
+            current_caster = day_schedule[current_time]["caster"]
         
         # 日付情報の整形
         date_obj = datetime.strptime(target_date, "%Y-%m-%d")
@@ -169,8 +178,35 @@ class WeatherNewsBot:
         now = datetime.now()
         current_time_str = now.strftime("%H:%M")
         
-        # 最小テストボットと同様のシンプルなツイート文
-        tweet_text = f"📺 {date_str}({weekday}) {current_program} {current_time_str} #ウェザーニュース #WNL"
+        # 主要な時間帯の番組表（コンパクト版）
+        main_slots = ["11:00", "14:00", "17:00", "20:00"]
+        schedule_lines = []
+        for time_slot in main_slots:
+            if time_slot in day_schedule:
+                program = day_schedule[time_slot]["program"]
+                caster = day_schedule[time_slot]["caster"]
+                # キャスター名を短縮（文字化け回避）
+                if len(caster) > 6:
+                    caster = caster[:6] + "..."
+                schedule_lines.append(f"{time_slot} {program}: {caster}")
+        
+        schedule_text = "\n".join(schedule_lines)
+        
+        # 本来の詳細版ツイート（でも280文字以内に調整）
+        tweet_text = f"""📺 {date_str}({weekday}) WNL番組表
+
+🕐 現在 {current_time_str} {current_program}
+👤 {current_caster[:6]}
+
+{schedule_text}
+
+#ウェザーニュース #WNL"""
+        
+        # 280文字チェック
+        if len(tweet_text) > 280:
+            # 長すぎる場合はシンプル版にフォールバック
+            tweet_text = f"📺 {date_str}({weekday}) {current_program} {current_time_str} #ウェザーニュース #WNL"
+            print("⚠️ 詳細版が長すぎるため、シンプル版を使用")
         
         print(f"📝 ツイート文生成完了 ({len(tweet_text)}文字)")
         return tweet_text
