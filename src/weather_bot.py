@@ -108,16 +108,39 @@ class WeatherNewsBot:
             return {}
     
     def extract_caster_name(self, caster_info):
-        """キャスター名を抽出"""
+        """キャスター名を抽出（文字化け対策）"""
         if not caster_info:
-            return "不明"
+            return "未定"
         
-        names = re.split(r'[　\s\n]+', caster_info)
-        valid_names = [name for name in names if name.strip()]
-        
-        if valid_names:
-            return valid_names[0]
-        return "不明"
+        # 文字化けや特殊文字を含む場合は「未定」とする
+        try:
+            # 日本語文字かチェック
+            clean_text = caster_info.strip()
+            # ASCII以外の文字で文字化けしていないかチェック
+            if any(ord(char) > 127 for char in clean_text):
+                # 日本語の範囲外の文字が含まれている場合
+                if not all(0x3040 <= ord(char) <= 0x309F or  # ひらがな
+                          0x30A0 <= ord(char) <= 0x30FF or  # カタカナ  
+                          0x4E00 <= ord(char) <= 0x9FAF or  # 漢字
+                          ord(char) in [0x3000, 0x3001, 0x3002] or  # 句読点
+                          char.isascii() or char.isspace() or char in "()（）"
+                          for char in clean_text):
+                    return "未定"
+            
+            # 改行、全角スペース、半角スペースで分割
+            names = re.split(r'[　\s\n()（）]+', clean_text)
+            # 空文字列を除去して最初の名前を取得
+            valid_names = [name for name in names if name.strip() and len(name) > 1]
+            
+            if valid_names:
+                first_name = valid_names[0]
+                # さらに文字化けチェック
+                if len(first_name) > 10:  # 異常に長い場合
+                    return "未定"
+                return first_name
+            return "未定"
+        except:
+            return "未定"
     
     def get_current_time_slot(self):
         """現在時刻に最も近い番組の時間帯を取得"""
@@ -152,7 +175,7 @@ class WeatherNewsBot:
         return closest_slot
     
     def format_schedule_tweet(self, schedule_data, target_date=None):
-        """詳細な番組表ツイート文を生成（成功パターンを維持）"""
+        """実行日の5:00-20:00の3時間毎キャスター表を生成"""
         if not target_date:
             target_date = datetime.now().strftime("%Y-%m-%d")
         
@@ -162,51 +185,33 @@ class WeatherNewsBot:
         
         day_schedule = schedule_data[target_date]
         
-        # 現在の番組情報を取得
-        current_time, current_program = self.get_current_time_slot()
-        current_caster = "不明"
-        if current_time in day_schedule:
-            current_caster = day_schedule[current_time]["caster"]
-        
         # 日付情報の整形
         date_obj = datetime.strptime(target_date, "%Y-%m-%d")
         date_str = date_obj.strftime("%m/%d")
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         weekday = weekdays[date_obj.weekday()]
         
-        # 現在時刻
-        now = datetime.now()
-        current_time_str = now.strftime("%H:%M")
-        
-        # 主要な時間帯の番組表（コンパクト版）
-        main_slots = ["11:00", "14:00", "17:00", "20:00"]
+        # 5:00から20:00まで3時間毎の番組表
+        target_slots = ["05:00", "08:00", "11:00", "14:00", "17:00", "20:00"]
         schedule_lines = []
-        for time_slot in main_slots:
+        
+        for time_slot in target_slots:
             if time_slot in day_schedule:
                 program = day_schedule[time_slot]["program"]
                 caster = day_schedule[time_slot]["caster"]
-                # キャスター名を短縮（文字化け回避）
-                if len(caster) > 6:
-                    caster = caster[:6] + "..."
                 schedule_lines.append(f"{time_slot} {program}: {caster}")
+            else:
+                # 番組がない場合
+                schedule_lines.append(f"{time_slot} --: 未定")
         
         schedule_text = "\n".join(schedule_lines)
         
-        # 本来の詳細版ツイート（でも280文字以内に調整）
+        # シンプルな番組表ツイート
         tweet_text = f"""📺 {date_str}({weekday}) WNL番組表
-
-🕐 現在 {current_time_str} {current_program}
-👤 {current_caster[:6]}
 
 {schedule_text}
 
 #ウェザーニュース #WNL"""
-        
-        # 280文字チェック
-        if len(tweet_text) > 280:
-            # 長すぎる場合はシンプル版にフォールバック
-            tweet_text = f"📺 {date_str}({weekday}) {current_program} {current_time_str} #ウェザーニュース #WNL"
-            print("⚠️ 詳細版が長すぎるため、シンプル版を使用")
         
         print(f"📝 ツイート文生成完了 ({len(tweet_text)}文字)")
         return tweet_text
