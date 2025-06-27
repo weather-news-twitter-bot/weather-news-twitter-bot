@@ -129,39 +129,45 @@ class WeatherNewsBot:
             return {}
     
     def extract_caster_name_new(self, cell):
-        """新しいキャスター名抽出方法（HTML構造を考慮）"""
+        """キャスター名抽出（区切り文字方式 - 最も確実）"""
         try:
-            # 方法1: 子要素を個別に確認
-            children = list(cell.children)
-            if children:
-                first_child = children[0]
-                if hasattr(first_child, 'strip'):
-                    # テキストノードの場合
-                    first_text = first_child.strip()
-                    if first_text:
-                        return self.clean_caster_name(first_text)
-                elif hasattr(first_child, 'get_text'):
-                    # 要素ノードの場合
-                    first_text = first_child.get_text(strip=True)
-                    if first_text:
-                        return self.clean_caster_name(first_text)
-            
-            # 方法2: 改行区切りでテキストを取得
+            # 方法1: 区切り文字方式（最も確実）
             text_with_separators = cell.get_text(separator='|', strip=True)
             if '|' in text_with_separators:
                 parts = text_with_separators.split('|')
-                if parts[0].strip():
-                    return self.clean_caster_name(parts[0].strip())
+                if len(parts) >= 1 and parts[0].strip():
+                    first_part = parts[0].strip()
+                    return self.clean_caster_name(first_part)
             
-            # 方法3: 従来の方法
+            # 方法2: 最初のdivタグから抽出（フォールバック）
+            first_div = cell.find('div')
+            if first_div:
+                caster_name = first_div.get_text(strip=True)
+                if caster_name:
+                    return self.clean_caster_name(caster_name)
+            
+            # 方法3: 最後の手段として改行区切り
             raw_text = cell.get_text(strip=True)
-            return self.extract_caster_name(raw_text)
+            if '\n' in raw_text:
+                lines = raw_text.split('\n')
+                if lines[0].strip():
+                    return self.clean_caster_name(lines[0].strip())
+            
+            # 方法4: 既知の気象予報士名で分割
+            forecasters = ["山口剛央", "飯島栄一", "宇野沢達也", "本田竜也", "芳野達郎"]
+            for forecaster in forecasters:
+                if forecaster in raw_text:
+                    parts = raw_text.split(forecaster)
+                    if parts[0].strip():
+                        return self.clean_caster_name(parts[0].strip())
+            
+            return "未定"
             
         except Exception as e:
             return "未定"
     
     def clean_caster_name(self, name):
-        """キャスター名をクリーンアップ"""
+        """キャスター名をクリーンアップ（シンプル版）"""
         if not name:
             return "未定"
         
@@ -173,13 +179,8 @@ class WeatherNewsBot:
         except (UnicodeDecodeError, UnicodeEncodeError):
             pass
         
-        # 気象予報士名を除去
-        forecasters = ["山口剛央", "飯島栄一", "宇野沢達也", "本田竜也", "芳野達郎"]
-        for forecaster in forecasters:
-            name = name.replace(forecaster, "").strip()
-        
-        # クロス関連を除去
-        name = re.sub(r'[()（）]*クロス[()（）]*', '', name).strip()
+        # 基本的なクリーンアップのみ
+        name = name.strip()
         
         # 有効性チェック
         if name and len(name) >= 2 and len(name) <= 10:
