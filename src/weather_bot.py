@@ -1,4 +1,30 @@
-async def debug_site_structure(self):
+def format_schedule_tweet(self, schedule_data):
+        """番組表ツイートを生成"""
+        today, jst_now = self.get_jst_today()
+        
+        if today not in schedule_data:
+            print(f"❌ {today} の番組表データがありません")
+            return None
+        
+        day_schedule = schedule_data[today]
+        
+        # 日付情報の整形（JST基準）
+        date_str = jst_now.strftime("%m/%d")
+        weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+        weekday = weekdays[jst_now.weekday()]
+        
+        # 番組表を生成    def get_jst_today(self):
+        """日本時間の今日の日付を取得"""
+        # UTCから日本時間(JST = UTC+9)に変換
+        utc_now = datetime.utcnow()
+        jst_now = utc_now + timedelta(hours=9)
+        today_jst = jst_now.strftime("%Y-%m-%d")
+        
+        print(f"🕒 UTC時刻: {utc_now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🕒 JST時刻: {jst_now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"📅 JST今日の日付: {today_jst}")
+        
+        return today_jst, jst_now    async def debug_site_structure(self):
         """サイト構造のデバッグ専用メソッド"""
         print("🔍 サイト構造の詳細調査開始...")
         
@@ -69,16 +95,16 @@ async def debug_site_structure(self):
                 print(tweet_text)
                 print("="*50)
         
-        return True# weather_bot.py
-import tweepy
+        return Trueimport tweepy
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
 from pyppeteer import launch
 from bs4 import BeautifulSoup
 import re
 import requests
+import pytz
 
 class DynamicWeatherNewsBot:
     def __init__(self):
@@ -193,7 +219,7 @@ class DynamicWeatherNewsBot:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
-                'Accept-Encoding': 'gzip, deflate',
+                'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
@@ -201,10 +227,12 @@ class DynamicWeatherNewsBot:
             response = requests.get('https://minorin.jp/wnl/caster.cgi', headers=headers, timeout=30)
             response.raise_for_status()
             
-            # エンコーディングを明示的に設定
-            response.encoding = 'utf-8'
+            # エンコーディングの自動検出を試行
+            if response.encoding.lower() in ['iso-8859-1', 'ascii']:
+                # UTF-8で再試行
+                response.encoding = 'utf-8'
             
-            print("✅ 静的HTML取得成功")
+            print(f"✅ 静的HTML取得成功 (エンコーディング: {response.encoding})")
             return response.text
             
         except Exception as e:
@@ -217,7 +245,8 @@ class DynamicWeatherNewsBot:
             soup = BeautifulSoup(html_content, 'html.parser')
             schedule_data = {}
             
-            today = datetime.now().strftime("%Y-%m-%d")
+            # 日本時間の今日の日付を取得
+            today, jst_now = self.get_jst_today()
             print(f"🔍 解析対象日: {today}")
             
             # HTMLの全体構造を調査
@@ -266,8 +295,15 @@ class DynamicWeatherNewsBot:
                                   (f"(class: {cell_class})" if cell_class else "") +
                                   (f"(bgcolor: {cell_bgcolor})" if cell_bgcolor else ""))
                             
-                            # 日付らしきパターンをチェック
-                            if any(pattern in cell_text for pattern in [today, "2025", "06-27", "06/27", "6/27"]):
+                            # 日付らしきパターンをチェック（今日の日付で）
+                            date_patterns = [
+                                today,  # 2025-06-28
+                                jst_now.strftime("%m/%d"),  # 06/28
+                                jst_now.strftime("%-m/%-d") if os.name != 'nt' else jst_now.strftime("%m/%d").lstrip('0').replace('/0', '/'),  # 6/28
+                                jst_now.strftime("%Y/%m/%d"),  # 2025/06/28
+                            ]
+                            
+                            if any(pattern in cell_text for pattern in date_patterns):
                                 print(f"    ⭐ 日付候補発見: '{cell_text}'")
                             
                             # 水色/ハイライト関連のスタイルをチェック
@@ -331,7 +367,14 @@ class DynamicWeatherNewsBot:
                     
                     # この行に今日の日付が含まれているかチェック
                     row_text = row.get_text()
-                    if any(pattern in row_text for pattern in [today, "2025-06-27", "06/27", "6/27"]):
+                    date_patterns = [
+                        today,  # 2025-06-28
+                        jst_now.strftime("%m/%d"),  # 06/28
+                        jst_now.strftime("%-m/%-d") if os.name != 'nt' else jst_now.strftime("%m/%d").lstrip('0').replace('/0', '/'),  # 6/28
+                        jst_now.strftime("%Y/%m/%d"),  # 2025/06/28
+                    ]
+                    
+                    if any(pattern in row_text for pattern in date_patterns):
                         print(f"  ⭐⭐⭐ 今日の番組表候補: 行 {row_index}")
                         highlighted_rows.append((row_index, row))
             
@@ -344,11 +387,16 @@ class DynamicWeatherNewsBot:
                     
                     for i, cell in enumerate(cells):
                         cell_text = cell.get_text(strip=True)
-                        print(f"列 {i}: '{cell_text}'")
+                        # 文字化け修復を試行
+                        fixed_text = self.fix_encoding(cell_text)
+                        if fixed_text != cell_text:
+                            print(f"列 {i}: '{cell_text}' → 修復後: '{fixed_text}'")
+                        else:
+                            print(f"列 {i}: '{fixed_text}'")
                         
                         # この列がキャスター名らしいかチェック
-                        if self.is_likely_caster_name(cell_text):
-                            print(f"  → キャスター名候補: {cell_text}")
+                        if self.is_likely_caster_name(fixed_text):
+                            print(f"  → キャスター名候補: {fixed_text}")
                     
                     # 実際の番組表として解析を試行
                     return self.extract_schedule_from_row(row, today)
@@ -363,6 +411,30 @@ class DynamicWeatherNewsBot:
             traceback.print_exc()
             # エラー時はダミーデータを返す
             return self.generate_dummy_schedule()
+    
+    def fix_encoding(self, text):
+        """文字エンコーディングの修復"""
+        if not text:
+            return text
+        
+        try:
+            # 一般的な文字化けパターンを修復
+            text = text.replace('â€™', "'").replace('â€œ', '"').replace('â€', '"')
+            
+            # 日本語の文字化けパターンを修復
+            if 'ã' in text or 'æ' in text or 'ç' in text:
+                try:
+                    # ISO-8859-1でエンコードしてUTF-8でデコード
+                    bytes_data = text.encode('iso-8859-1')
+                    fixed_text = bytes_data.decode('utf-8')
+                    return fixed_text
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    # 修復できない場合は元の文字列を返す
+                    pass
+            
+            return text
+        except Exception:
+            return text
     
     def is_likely_caster_name(self, text):
         """テキストがキャスター名らしいかを判定"""
@@ -419,7 +491,7 @@ class DynamicWeatherNewsBot:
     
     def generate_dummy_schedule(self):
         """ダミーの番組表データを生成（テスト用）"""
-        today = datetime.now().strftime("%Y-%m-%d")
+        today, _ = self.get_jst_today()
         return {
             today: {
                 "05:00": {"program": "モーニング", "caster": "山岸愛梨"},
@@ -439,18 +511,24 @@ class DynamicWeatherNewsBot:
             if first_div:
                 caster_name = first_div.get_text(strip=True)
                 if caster_name:
-                    return self.clean_caster_name(caster_name)
+                    fixed_name = self.fix_encoding(caster_name)
+                    return self.clean_caster_name(fixed_name)
             
             # 区切り文字方式
             text_with_separators = cell.get_text(separator='|', strip=True)
             if '|' in text_with_separators:
                 parts = text_with_separators.split('|')
                 if parts[0].strip():
-                    return self.clean_caster_name(parts[0].strip())
+                    fixed_name = self.fix_encoding(parts[0].strip())
+                    return self.clean_caster_name(fixed_name)
             
             # フォールバック
             raw_text = cell.get_text(strip=True)
-            return self.clean_caster_name(raw_text) if raw_text else "未定"
+            if raw_text:
+                fixed_text = self.fix_encoding(raw_text)
+                return self.clean_caster_name(fixed_text)
+            
+            return "未定"
             
         except Exception:
             return "未定"
@@ -500,7 +578,7 @@ class DynamicWeatherNewsBot:
     
     def format_schedule_tweet(self, schedule_data):
         """番組表ツイートを生成"""
-        today = datetime.now().strftime("%Y-%m-%d")
+        today, jst_now = self.get_jst_today()
         
         if today not in schedule_data:
             print(f"❌ {today} の番組表データがありません")
@@ -508,11 +586,10 @@ class DynamicWeatherNewsBot:
         
         day_schedule = schedule_data[today]
         
-        # 日付情報の整形
-        date_obj = datetime.strptime(today, "%Y-%m-%d")
-        date_str = date_obj.strftime("%m/%d")
+        # 日付情報の整形（JST基準）
+        date_str = jst_now.strftime("%m/%d")
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-        weekday = weekdays[date_obj.weekday()]
+        weekday = weekdays[jst_now.weekday()]
         
         # 番組表を生成
         target_slots = ["05:00", "08:00", "11:00", "14:00", "17:00", "20:00"]
@@ -528,7 +605,10 @@ class DynamicWeatherNewsBot:
         
         schedule_text = "\n".join(schedule_lines)
         
-        tweet_text = f"""📺 {date_str}({weekday}) WNL番組表
+        # 重複投稿を避けるために時刻を追加
+        hour_minute = jst_now.strftime("%H:%M")
+        
+        tweet_text = f"""📺 {date_str}({weekday}) WNL番組表 [{hour_minute}更新]
 
 {schedule_text}
 
