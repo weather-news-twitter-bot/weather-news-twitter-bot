@@ -41,20 +41,34 @@ class WeatherNewsBot:
             raise
     
     def fetch_schedule_data(self):
-        """番組表データを取得"""
+        """番組表データを取得（文字エンコーディング修正）"""
         main_url = "https://minorin.jp/wnl/caster.cgi"
         
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate',
+                'Accept-Charset': 'UTF-8'
             }
             
             print(f"📡 番組表データを取得中: {main_url}")
             response = requests.get(main_url, headers=headers, timeout=30)
             response.raise_for_status()
             
-            print("✅ 番組表データ取得成功")
-            return response.text
+            # 文字エンコーディングを明示的に設定
+            if response.encoding is None or response.encoding.lower() in ['iso-8859-1', 'ascii']:
+                # エンコーディングが正しく検出されていない場合
+                response.encoding = 'utf-8'
+            
+            print(f"✅ 番組表データ取得成功 (エンコーディング: {response.encoding})")
+            
+            # エンコーディングテスト
+            content = response.text
+            print(f"🔍 コンテンツサンプル: {content[:200]}")
+            
+            return content
             
         except requests.RequestException as e:
             print(f"❌ データ取得失敗: {e}")
@@ -108,7 +122,7 @@ class WeatherNewsBot:
             return {}
     
     def extract_caster_name(self, caster_info):
-        """キャスター名を抽出（1行目がキャスター、2行目が気象予報士）"""
+        """キャスター名を抽出（エンコーディング問題対応）"""
         if not caster_info:
             return "未定"
         
@@ -116,8 +130,22 @@ class WeatherNewsBot:
             # デバッグ用：元データを出力
             print(f"🔍 元データ: {repr(caster_info)}")
             
+            # 文字エンコーディング修復を試行
+            fixed_text = caster_info
+            
+            # ISO-8859-1でエンコードされた文字をUTF-8として再デコード
+            try:
+                if isinstance(caster_info, str):
+                    # str → bytes → str でエンコーディング修復
+                    bytes_data = caster_info.encode('iso-8859-1')
+                    fixed_text = bytes_data.decode('utf-8')
+                    print(f"🔍 修復後: {repr(fixed_text)}")
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                print(f"🔍 エンコーディング修復失敗、元データを使用")
+                fixed_text = caster_info
+            
             # 改行で分割して1行目を取得
-            lines = caster_info.strip().split('\n')
+            lines = fixed_text.strip().split('\n')
             print(f"🔍 分割後の行数: {len(lines)}")
             
             if not lines:
@@ -133,7 +161,7 @@ class WeatherNewsBot:
             cleaned_name = re.sub(r'[()（）].*', '', first_line).strip()
             print(f"🔍 注釈除去後: {repr(cleaned_name)}")
             
-            # 空白や特殊文字で分割（複数名の場合は最初の名前）
+            # 空白で分割（複数名の場合は最初の名前）
             names = re.split(r'[　\s]+', cleaned_name)
             valid_names = [name for name in names if name.strip() and len(name) >= 2]
             print(f"🔍 有効な名前: {valid_names}")
@@ -142,13 +170,7 @@ class WeatherNewsBot:
                 caster_name = valid_names[0]
                 print(f"🔍 最終的な名前: {repr(caster_name)}")
                 
-                # 文字化けチェック（簡単な方法）
-                # 文字化けした文字が含まれているかチェック
-                if any(char in caster_name for char in ['å', 'ã', 'ç', 'æ', 'è', 'é', 'ê', 'ë']):
-                    print(f"🔍 文字化け検出: {caster_name}")
-                    return "未定"
-                
-                # 基本的な長さチェックのみ（10文字以内）
+                # 基本的な長さチェック（10文字以内）
                 if len(caster_name) <= 10:
                     return caster_name
             
