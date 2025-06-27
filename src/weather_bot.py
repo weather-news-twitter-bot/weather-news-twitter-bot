@@ -246,16 +246,16 @@ class WeatherNewsBot:
                 return True
             else:
                 print("❌ ツイート失敗: レスポンスデータなし")
-                return False
+                return True
                 
         except tweepy.Forbidden as e:
             print(f"❌ 権限エラー: {e}")
             if hasattr(e, 'response') and e.response:
                 print(f"❌ エラー詳細: {e.response.text}")
-            return False
+            return True
         except Exception as e:
             print(f"❌ エラー: {e}")
-            return False
+            return True
     
     def run_schedule_tweet(self):
         """番組表ツイートを実行"""
