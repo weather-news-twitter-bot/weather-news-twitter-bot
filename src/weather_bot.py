@@ -42,8 +42,8 @@ class DynamicWeatherNewsBot:
         try:
             print("🚀 ブラウザを起動してJavaScript実行後のHTMLを取得中...")
             
-            # Puppeteerでブラウザを起動
-            browser = await launch({
+            # Puppeteer設定を環境に応じて調整
+            launch_options = {
                 'headless': True,
                 'args': [
                     '--no-sandbox',
@@ -53,9 +53,18 @@ class DynamicWeatherNewsBot:
                     '--no-first-run',
                     '--no-zygote',
                     '--single-process',
-                    '--disable-gpu'
+                    '--disable-gpu',
+                    '--disable-web-security',
+                    '--disable-features=VizDisplayCompositor'
                 ]
-            })
+            }
+            
+            # CI環境での実行可能パス設定
+            if os.environ.get('PUPPETEER_EXECUTABLE_PATH'):
+                launch_options['executablePath'] = os.environ.get('PUPPETEER_EXECUTABLE_PATH')
+            
+            # Puppeteerでブラウザを起動
+            browser = await launch(launch_options)
             
             page = await browser.newPage()
             
