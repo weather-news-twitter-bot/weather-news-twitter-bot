@@ -1,4 +1,118 @@
-# weather_bot.py
+def debug_html_structure(self, html_content):
+        """HTMLの構造をデバッグ表示"""
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            today, _ = self.get_jst_today()
+            
+            print(f"\n{'='*80}")
+            print(f"🔍 HTML構造デバッグ - 検索対象日: {today}")
+            print(f"{'='*80}")
+            
+            # 今日の日付を含む行を探す
+            rows = soup.find_all('tr')
+            today_row = None
+            
+            for row_index, row in enumerate(rows):
+                cells = row.find_all(['td', 'th'])
+                if len(cells) >= 7:
+                    first_cell_text = cells[0].get_text(strip=True)
+                    if today in first_cell_text:
+                        today_row = row
+                        print(f"✅ 今日の行を発見: 行 {row_index}")
+                        print(f"   日付セル: '{first_cell_text}'")
+                        break
+            
+            if not today_row:
+                print("❌ 今日の行が見つかりませんでした")
+                return
+            
+            # 今日の行の詳細を表示
+            cells = today_row.find_all(['td', 'th'])
+            print(f"\n📋 今日の行の詳細解析:")
+            print(f"   セル数: {len(cells)}")
+            
+            time_slots = [
+                ("05:00", "モーニング"),
+                ("08:00", "サンシャイン"), 
+                ("11:00", "コーヒータイム"),
+                ("14:00", "アフタヌーン"),
+                ("17:00", "イブニング"),
+                ("20:00", "ムーン")
+            ]
+            
+            for i, (time_slot, program) in enumerate(time_slots):
+                cell_index = i + 1  # 日付列をスキップ
+                if cell_index < len(cells):
+                    cell = cells[cell_index]
+                    
+                    print(f"\n🔷 {time_slot} {program} (セル {cell_index}):")
+                    print(f"   セルの生HTML:")
+                    print(f"   {'-'*60}")
+                    print(f"   {str(cell)}")
+                    print(f"   {'-'*60}")
+                    
+                    print(f"   セルのテキスト:")
+                    print(f"   - get_text(): '{cell.get_text()}'")
+                    print(f"   - get_text(strip=True): '{cell.get_text(strip=True)}'")
+                    print(f"   - get_text(separator='|'): '{cell.get_text(separator='|', strip=True)}'")
+                    
+                    # 子要素の詳細
+                    print(f"   子要素:")
+                    for child_index, child in enumerate(cell.children):
+                        if child.name:  # タグ要素の場合
+                            print(f"   - [{child_index}] <{child.name}> '{child.get_text(strip=True)}'")
+                            if child.name == 'img':
+                                print(f"        alt='{child.get('alt', '')}' src='{child.get('src', '')}'")
+                        elif str(child).strip():  # テキストノードの場合
+                            print(f"   - [{child_index}] テキスト: '{str(child).strip()}'")
+                    
+                    # div, span要素の詳細
+                    for tag_name in ['div', 'span']:
+                        elements = cell.find_all(tag_name)
+                        if elements:
+                            print(f"   {tag_name}要素:")
+                            for elem_index, elem in enumerate(elements):
+                                print(f"   - {tag_name}[{elem_index}]: '{elem.get_text(strip=True)}'")
+                                if elem.get('class'):
+                                    print(f"     class='{elem.get('class')}'")
+                                if elem.get('id'):
+                                    print(f"     id='{elem.get('id')}'")
+                else:
+                    print(f"\n⚠️ {time_slot} {program}: セルが存在しません")
+            
+            print(f"\n{'='*80}")
+            print(f"🔍 デバッグ終了")
+            print(f"{'='*80}\n")
+            
+        except Exception as e:
+            print(f"❌ HTMLデバッグエラー: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def run_debug_mode(self):
+        """デバッグモードで実行"""
+        print("🚀 デバッグモード実行開始")
+        
+        # データを取得
+        html_content = self.fetch_schedule_data()
+        if not html_content:
+            print("❌ HTMLの取得に失敗しました")
+            return False
+        
+        # HTML構造をデバッグ表示
+        self.debug_html_structure(html_content)
+        
+        # 通常の解析も実行
+        schedule_data = self.find_today_schedule(html_content)
+        if schedule_data:
+            tweet_text = self.format_schedule_tweet(schedule_data)
+            if tweet_text:
+                print(f"\n📝 生成されるツイート文:")
+                print("="*50)
+                print(tweet_text)
+                print("="*50)
+        
+        return True# weather_bot.py
 import tweepy
 import os
 import sys
