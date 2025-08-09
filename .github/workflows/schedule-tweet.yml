@@ -41,17 +41,35 @@ jobs:
     - name: Run Selenium scraper
       run: |
         echo "🔄 Selenium scraping..."
-        python selenium_weathernews_bot.py > selenium_output.json 2>&1 || echo "⚠️ Selenium failed"
+        if [ -f "selenium_weathernews_bot.py" ]; then
+          python selenium_weathernews_bot.py > selenium_output.json 2>&1 || echo "⚠️ Selenium failed"
+        elif [ -f "debug_selenium_bot.py" ]; then
+          python debug_selenium_bot.py > selenium_output.json 2>&1 || echo "⚠️ Debug Selenium failed"
+        else
+          echo "⚠️ No Selenium script found"
+          echo '{"error": "No Selenium script found"}' > selenium_output.json
+        fi
         if [ -f selenium_output.json ]; then
           echo "✅ Selenium output generated"
+          echo "--- Selenium Output Preview ---"
+          head -20 selenium_output.json || echo "No preview available"
         fi
         
     - name: Run Pyppeteer scraper
       run: |
         echo "🔄 Pyppeteer scraping..."
-        python pyppeteer_weathernews_bot.py > pyppeteer_output.json 2>&1 || echo "⚠️ Pyppeteer failed"
+        if [ -f "pyppeteer_weathernews_bot.py" ]; then
+          python pyppeteer_weathernews_bot.py > pyppeteer_output.json 2>&1 || echo "⚠️ Pyppeteer failed"
+        elif [ -f "debug_pyppeteer_bot.py" ]; then
+          python debug_pyppeteer_bot.py > pyppeteer_output.json 2>&1 || echo "⚠️ Debug Pyppeteer failed"
+        else
+          echo "⚠️ No Pyppeteer script found"
+          echo '{"error": "No Pyppeteer script found"}' > pyppeteer_output.json
+        fi
         if [ -f pyppeteer_output.json ]; then
           echo "✅ Pyppeteer output generated"
+          echo "--- Pyppeteer Output Preview ---"
+          head -20 pyppeteer_output.json || echo "No preview available"
         fi
         
     - name: Post to Twitter/X
