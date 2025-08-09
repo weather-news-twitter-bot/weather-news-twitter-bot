@@ -1,7 +1,12 @@
-# ウェザーニュースボット用依存関係（軽量版）
+# ウェザーニュースボット用依存関係（通常版）
 
 # Twitter API
 tweepy>=4.14.0
 
-# ブラウザ自動化（Playwrightのみ）
+# ブラウザ自動化（複数手法対応）
 playwright>=1.40.0
+selenium>=4.15.0
+pyppeteer>=1.0.2
+
+# WebDriver管理（Selenium用）
+webdriver-manager>=4.0.0
