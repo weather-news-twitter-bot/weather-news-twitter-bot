@@ -40,7 +40,7 @@ jobs:
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
       run: |
         echo "🤖 Running weather bot..."
-        python weather_bot.py
+        python src/weather_bot.py
         echo "🏁 Complete"
         
     - name: Upload artifacts
