@@ -111,7 +111,7 @@ class WeatherNewsBot:
                 await browser.close()
     
     async def extract_schedule_data(self, page):
-        """スケジュール情報抽出（aタグ対応版）"""
+        """スケジュール情報抽出（同一セル対応版）"""
         schedule_data = {
             'date': datetime.now().strftime('%Y-%m-%d'),
             'timestamp': datetime.now().isoformat(),
@@ -119,175 +119,198 @@ class WeatherNewsBot:
             'source': 'weather_bot'
         }
         
-        debug_log("番組表スクレイピング開始（aタグ検索モード）...")
+        debug_log("番組表スクレイピング開始（同一セル検索モード）...")
         
         try:
-            # 直接キャスターのリンクを探す
-            caster_links = await page.evaluate('''() => {
+            # 同一セル内の時間とキャスター情報を抽出
+            schedule_items = await page.evaluate('''() => {
                 const result = [];
                 
-                // キャスターページへのリンクを探す
-                const links = document.querySelectorAll('a[href*="caster"]');
+                // 番組ブロックを探す（時間とキャスター情報が含まれる要素）
+                const selectors = [
+                    '.schedule-item',
+                    '.program-item', 
+                    '.timetable-item',
+                    '[class*="schedule"]',
+                    '[class*="program"]',
+                    '[class*="timetable"]'
+                ];
                 
-                links.forEach(link => {
-                    const href = link.href;
-                    const text = link.textContent?.trim();
+                // セレクタで要素を探す
+                let scheduleElements = [];
+                selectors.forEach(selector => {
+                    const elements = document.querySelectorAll(selector);
+                    scheduleElements = scheduleElements.concat(Array.from(elements));
+                });
+                
+                // セレクタで見つからない場合は、キャスターリンクの親要素を探す
+                if (scheduleElements.length === 0) {
+                    const casterLinks = document.querySelectorAll('a[href*="caster"]');
+                    casterLinks.forEach(link => {
+                        // キャスターリンクを含む親要素を探す
+                        let parent = link.parentElement;
+                        while (parent && parent !== document.body) {
+                            const parentText = parent.textContent || '';
+                            // 時間情報が含まれる親要素を見つけた場合
+                            if (parentText.match(/(0?5|0?8|11|14|17|20|23):(00|30)/)) {
+                                scheduleElements.push(parent);
+                                break;
+                            }
+                            parent = parent.parentElement;
+                        }
+                    });
+                }
+                
+                // 各要素から時間とキャスター情報を抽出
+                scheduleElements.forEach(element => {
+                    const elementText = element.textContent || '';
+                    const elementHTML = element.innerHTML || '';
                     
-                    // キャスター名のパターンマッチ
-                    const namePattern = /^[ぁ-んァ-ヶ一-龯\\s]{2,12}$/;
+                    // 時間パターンを探す
+                    const timeMatch = elementText.match(/(0?5|0?8|11|14|17|20|23):(00|30)/);
                     
-                    if (text && namePattern.test(text) && href.includes('caster')) {
-                        // リンクの周辺から時間情報を探す
-                        let timeInfo = null;
+                    if (timeMatch) {
+                        const timeStr = timeMatch[0];
                         
-                        // 親要素、兄弟要素から時間を探す
-                        let currentElement = link;
-                        for (let i = 0; i < 5; i++) {
-                            if (currentElement.parentElement) {
-                                currentElement = currentElement.parentElement;
-                                const parentText = currentElement.textContent || '';
-                                const timeMatch = parentText.match(/(0?5|0?8|11|14|17|20|23):(00|30)/);
-                                if (timeMatch) {
-                                    timeInfo = timeMatch[0];
-                                    break;
+                        // 同じ要素内のキャスターリンクを探す
+                        const casterLink = element.querySelector('a[href*="caster"]');
+                        
+                        if (casterLink) {
+                            const casterName = casterLink.textContent?.trim();
+                            const casterUrl = casterLink.href;
+                            
+                            if (casterName && casterName.length >= 2) {
+                                result.push({
+                                    time: timeStr,
+                                    caster: casterName,
+                                    url: casterUrl,
+                                    context: elementText.substring(0, 150)
+                                });
+                            }
+                        } else {
+                            // リンクがない場合は、テキストからキャスター名を抽出
+                            const namePattern = /[ぁ-んァ-ヶ一-龯\\s]{2,8}/g;
+                            const names = elementText.match(namePattern);
+                            
+                            if (names && names.length > 0) {
+                                // 最も可能性の高い名前を選択（時間の後に来る名前）
+                                const timeIndex = elementText.indexOf(timeStr);
+                                for (let name of names) {
+                                    const nameIndex = elementText.indexOf(name);
+                                    if (nameIndex > timeIndex && name.length >= 2 && name.length <= 8) {
+                                        // 除外単語チェック
+                                        const excludeWords = ['ニュース', 'ライブ', 'モーニング', 'サンシャイン', 'コーヒー', 'アフタヌーン', 'イブニング', 'ムーン'];
+                                        if (!excludeWords.some(word => name.includes(word))) {
+                                            result.push({
+                                                time: timeStr,
+                                                caster: name.trim(),
+                                                url: '',
+                                                context: elementText.substring(0, 150)
+                                            });
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
-                        
-                        // 兄弟要素からも時間を探す
-                        if (!timeInfo) {
-                            const siblings = [link.previousElementSibling, link.nextElementSibling];
-                            siblings.forEach(sibling => {
-                                if (sibling && !timeInfo) {
-                                    const siblingText = sibling.textContent || '';
-                                    const timeMatch = siblingText.match(/(0?5|0?8|11|14|17|20|23):(00|30)/);
-                                    if (timeMatch) {
-                                        timeInfo = timeMatch[0];
-                                    }
-                                }
-                            });
-                        }
-                        
-                        result.push({
-                            name: text,
-                            href: href,
-                            time: timeInfo,
-                            context: currentElement.textContent?.substring(0, 100) || ''
-                        });
                     }
                 });
                 
                 return result;
             }''')
             
-            debug_log(f"キャスターリンク検索結果: {len(caster_links)}件")
+            debug_log(f"同一セル検索結果: {len(schedule_items)}件")
             
-            # 時間情報付きのキャスターを処理
-            time_based_casters = {}
-            
-            for link_info in caster_links:
-                caster_name = link_info['name']
-                profile_url = link_info['href']
-                time_str = link_info['time']
+            # 結果を処理
+            for item in schedule_items:
+                caster_name = item['caster']
+                time_str = item['time']
+                profile_url = item['url']
                 
-                debug_log(f"検出: {caster_name} - {time_str} - {profile_url}")
+                debug_log(f"検出: {time_str} - {caster_name} - {profile_url}")
+                debug_log(f"コンテキスト: {item['context'][:50]}...")
                 
-                if time_str and self.is_valid_caster_name(caster_name):
-                    # 同じ時間帯に複数のキャスターがいる場合は最初のものを優先
-                    if time_str not in time_based_casters:
-                        time_based_casters[time_str] = {
-                            'time': time_str,
-                            'caster': caster_name,
-                            'program': self.get_program_name_by_time(time_str),
-                            'profile_url': profile_url
-                        }
-            
-            # 時間情報のないキャスターの処理
-            nameless_casters = [info for info in caster_links if not info['time']]
-            
-            if nameless_casters and len(time_based_casters) < 6:
-                debug_log(f"時間情報なしキャスター: {len(nameless_casters)}件 - 推定時間で補完")
-                
-                # 標準時間で補完
-                standard_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
-                used_times = set(time_based_casters.keys())
-                available_times = [t for t in standard_times if t not in used_times]
-                
-                for i, caster_info in enumerate(nameless_casters[:len(available_times)]):
-                    if self.is_valid_caster_name(caster_info['name']):
-                        time_str = available_times[i]
-                        time_based_casters[time_str] = {
-                            'time': time_str,
-                            'caster': caster_info['name'],
-                            'program': self.get_program_name_by_time(time_str),
-                            'profile_url': caster_info['href']
-                        }
-                        debug_log(f"推定時間割り当て: {time_str} - {caster_info['name']}")
-            
-            schedule_data['programs'] = list(time_based_casters.values())
-            debug_log(f"最終的に取得したプログラム: {len(schedule_data['programs'])}件")
+                if self.is_valid_caster_name(caster_name):
+                    program_info = {
+                        'time': time_str,
+                        'caster': caster_name,
+                        'program': self.get_program_name_by_time(time_str)
+                    }
+                    
+                    if profile_url:
+                        program_info['profile_url'] = profile_url
+                    
+                    schedule_data['programs'].append(program_info)
+                    debug_log(f"有効なプログラム追加: {time_str} - {caster_name}")
+                else:
+                    debug_log(f"無効なキャスター名: {caster_name}")
             
         except Exception as e:
-            debug_log(f"aタグ解析エラー: {e}")
+            debug_log(f"同一セル解析エラー: {e}")
         
-        # フォールバック処理
-        if len(schedule_data['programs']) == 0:
-            debug_log("aタグから情報取得できず、代替手段を試行")
+        # 重複除去
+        schedule_data['programs'] = self.remove_duplicates(schedule_data['programs'])
+        
+        # データが少ない場合は、より広範囲な検索を実行
+        if len(schedule_data['programs']) < 3:
+            debug_log("データが不足、追加検索を実行...")
             
-            # 従来の方法も試す
             try:
-                # テーブル構造から時間とキャスター情報を抽出
-                table_data = await page.evaluate('''() => {
+                # より広範囲な検索
+                additional_data = await page.evaluate('''() => {
                     const result = [];
-                    const tables = document.querySelectorAll('table, .timetable, .schedule');
                     
-                    tables.forEach(table => {
-                        const rows = table.querySelectorAll('tr, .schedule-row');
-                        rows.forEach(row => {
-                            const cells = row.querySelectorAll('td, th, .time-cell, .caster-cell');
-                            if (cells.length >= 2) {
-                                for (let i = 0; i < cells.length - 1; i++) {
-                                    const timeText = cells[i].textContent?.trim();
-                                    const casterElement = cells[i + 1].querySelector('a[href*="caster"]');
-                                    
-                                    if (casterElement) {
-                                        const casterName = casterElement.textContent?.trim();
-                                        const casterUrl = casterElement.href;
-                                        const timeMatch = timeText?.match(/(0?5|0?8|11|14|17|20|23):(00|30)/);
-                                        
-                                        if (timeMatch && casterName) {
-                                            result.push({
-                                                time: timeMatch[0],
-                                                caster: casterName,
-                                                url: casterUrl
-                                            });
-                                        }
-                                    }
-                                }
+                    // 全ての要素をスキャンして時間とキャスター情報を探す
+                    const allElements = document.querySelectorAll('*');
+                    
+                    allElements.forEach(element => {
+                        const text = element.textContent || '';
+                        
+                        // 短すぎる、または長すぎるテキストはスキップ
+                        if (text.length < 10 || text.length > 200) return;
+                        
+                        // 時間パターンがある要素のみ処理
+                        const timeMatch = text.match(/(0?5|0?8|11|14|17|20|23):(00|30)/);
+                        if (!timeMatch) return;
+                        
+                        const timeStr = timeMatch[0];
+                        
+                        // キャスターリンクを探す
+                        const casterLink = element.querySelector('a[href*="caster"]');
+                        if (casterLink) {
+                            const casterName = casterLink.textContent?.trim();
+                            if (casterName && casterName.length >= 2) {
+                                result.push({
+                                    time: timeStr,
+                                    caster: casterName,
+                                    url: casterLink.href
+                                });
                             }
-                        });
+                        }
                     });
                     
                     return result;
                 }''')
                 
-                debug_log(f"テーブル解析結果: {len(table_data)}件")
+                debug_log(f"追加検索結果: {len(additional_data)}件")
                 
-                for item in table_data:
+                for item in additional_data:
                     if self.is_valid_caster_name(item['caster']):
-                        schedule_data['programs'].append({
-                            'time': item['time'],
-                            'caster': item['caster'],
-                            'program': self.get_program_name_by_time(item['time']),
-                            'profile_url': item['url']
-                        })
-                        
+                        # 既存のデータと重複しないかチェック
+                        existing_times = [p['time'] for p in schedule_data['programs']]
+                        if item['time'] not in existing_times:
+                            schedule_data['programs'].append({
+                                'time': item['time'],
+                                'caster': item['caster'],
+                                'program': self.get_program_name_by_time(item['time']),
+                                'profile_url': item['url']
+                            })
+                            debug_log(f"追加データ: {item['time']} - {item['caster']}")
+                
             except Exception as e:
-                debug_log(f"テーブル解析エラー: {e}")
+                debug_log(f"追加検索エラー: {e}")
         
-        # 重複除去
-        schedule_data['programs'] = self.remove_duplicates(schedule_data['programs'])
-        
+        debug_log(f"最終抽出結果: {len(schedule_data['programs'])}件")
         return schedule_data
     
     async def extract_from_alternative_source(self, page):
