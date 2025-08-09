@@ -24,51 +24,31 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Install Chrome dependencies
+    - name: Install Chrome
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          wget \
-          gnupg \
-          unzip \
-          curl
-        
-        # Google Chrome Stable をインストール
+        sudo apt-get install -y wget gnupg unzip curl
         wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
         sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
         sudo apt-get update
         sudo apt-get install -y google-chrome-stable
-        
-        # ChromeDriverは webdriver-manager で自動管理
           
-    - name: Download Chromium for Pyppeteer
+    - name: Setup Pyppeteer
       run: |
-        python -c "
-import asyncio
-from pyppeteer import launch
-
-async def download_chromium():
-    try:
-        browser = await launch()
-        await browser.close()
-        print('✅ Chromium download completed')
-    except Exception as e:
-        print(f'⚠️ Chromium download failed: {e}')
-
-asyncio.run(download_chromium())
-"
+        echo "🔄 Pyppeteer setup..."
+        python -c "from pyppeteer import launch; print('Pyppeteer ready')" || echo "⚠️ Setup warning"
         
-    - name: Run WeatherNews scraper (Selenium)
+    - name: Run Selenium scraper
       run: |
-        echo "🔄 Seleniumでスクレイピング実行中..."
+        echo "🔄 Selenium scraping..."
         python selenium_weathernews_bot.py > selenium_output.json 2>&1 || echo "⚠️ Selenium failed"
         if [ -f selenium_output.json ]; then
           echo "✅ Selenium output generated"
         fi
         
-    - name: Run WeatherNews scraper (Pyppeteer) 
+    - name: Run Pyppeteer scraper
       run: |
-        echo "🔄 Pyppeteerでスクレイピング実行中..."
+        echo "🔄 Pyppeteer scraping..."
         python pyppeteer_weathernews_bot.py > pyppeteer_output.json 2>&1 || echo "⚠️ Pyppeteer failed"
         if [ -f pyppeteer_output.json ]; then
           echo "✅ Pyppeteer output generated"
@@ -81,9 +61,9 @@ asyncio.run(download_chromium())
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
       run: |
-        echo "📱 X(Twitter)投稿実行中..."
-        python weather_bot.py 2>&1 || echo "⚠️ X投稿に失敗しました"
-        echo "🏁 処理完了"
+        echo "📱 X posting..."
+        python weather_bot.py 2>&1 || echo "⚠️ X posting failed"
+        echo "🏁 Complete"
         
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
