@@ -1,19 +1,12 @@
-# Web scraping and automation
-selenium>=4.15.0
-pyppeteer==1.0.2
-webdriver-manager>=4.0.0
-
-# HTTP requests and HTML parsing
-requests==2.31.0
-beautifulsoup4==4.12.2
-lxml>=4.9.0
+# ウェザーニュースボット用依存関係（統合版）
 
 # Twitter API
-tweepy==4.14.0
+tweepy>=4.14.0
 
-# Data processing and utilities
-python-dateutil>=2.8.0
-pytz>=2023.3
+# ブラウザ自動化
+playwright>=1.40.0
+selenium>=4.15.0
+pyppeteer>=1.0.2
 
-# GitHub Actions compatibility
-asyncio>=3.4.3
+# WebDriver管理（Selenium用）
+webdriver-manager>=4.0.0
