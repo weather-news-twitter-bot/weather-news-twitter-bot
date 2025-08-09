@@ -1,4 +1,19 @@
-tweepy==4.14.0
+# Web scraping and automation
+selenium>=4.15.0
+pyppeteer==1.0.2
+webdriver-manager>=4.0.0
+
+# HTTP requests and HTML parsing
 requests==2.31.0
 beautifulsoup4==4.12.2
-pyppeteer==1.0.2
+lxml>=4.9.0
+
+# Twitter API
+tweepy==4.14.0
+
+# Data processing and utilities
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# GitHub Actions compatibility
+asyncio>=3.4.3
