@@ -116,8 +116,8 @@ class WeatherNewsBot:
             return None
     
     def get_fallback_schedule(self, partial_data=None):
-        """フォールバック用スケジュール（部分データがあれば活用）"""
-        log("フォールバック: スケジュール生成")
+        """フォールバック用スケジュール（取得できなかった分は未定）"""
+        log("フォールバック: スケジュール生成（未定ベース）")
         
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
         programs = []
@@ -131,30 +131,16 @@ class WeatherNewsBot:
                 if item.get('time') in main_times:
                     existing_casters[item['time']] = item.get('caster', '未定')
         
-        # 実際のHTMLから分かった今日のキャスター（フォールバック用）
-        known_schedule = {
-            '05:00': '青原桃香',
-            '08:00': '田辺真南葉', 
-            '11:00': '松本真央',
-            '14:00': '小林李衣奈',
-            '17:00': '岡本結子リサ',
-            '20:00': '山岸愛梨'
-        }
-        
         # 各時間帯にキャスターを割り当て
         for time_str in main_times:
             if time_str in existing_casters:
                 # 実際に取得できたデータを使用
                 caster_name = existing_casters[time_str]
                 log(f"実データ使用: {time_str} - {caster_name}")
-            elif time_str in known_schedule:
-                # 既知のスケジュールを使用
-                caster_name = known_schedule[time_str]
-                log(f"既知スケジュール: {time_str} - {caster_name}")
             else:
-                # それでもない場合は「未定」
+                # 取得できなかった場合は「未定」
                 caster_name = '未定'
-                log(f"未定: {time_str}")
+                log(f"取得失敗で未定: {time_str}")
             
             programs.append({
                 'time': time_str,
@@ -285,7 +271,7 @@ class WeatherNewsBot:
         now_jst = datetime.now(JST)
         today_jst = now_jst.strftime('%Y年%m月%d日')
         
-        tweet_text = f"📺 {today_jst} ウェザーニュースLiVE 番組表\n\n"
+        tweet_text = f"📺 {today_jst} WNL番組表\n\n"
         
         programs = self.schedule_data['programs']
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
@@ -315,7 +301,7 @@ class WeatherNewsBot:
         if len(tweet_text) > 280:
             log(f"ツイート文が長すぎます({len(tweet_text)}文字)。短縮します。")
             # 基本情報のみに短縮
-            tweet_text = f"📺 {today_jst} ウェザーニュースLiVE 番組表\n\n"
+            tweet_text = f"📺 {today_jst} WNL番組表\n\n"
             
             # 最初の4つの時間帯のみ表示して文字数を抑える
             for time_str in main_times[:4]:
