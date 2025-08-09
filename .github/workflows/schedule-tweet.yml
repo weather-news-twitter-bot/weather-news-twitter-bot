@@ -1,9 +1,10 @@
-name: WeatherNews Schedule Bot (軽量版)
+name: WeatherNews Schedule Bot
 
 on:
   schedule:
+    # 毎日24:00 JST に実行 (UTC 15:00 = JST 24:00)
     - cron: '0 15 * * *'
-  workflow_dispatch:
+  workflow_dispatch: # 手動実行も可能
 
 jobs:
   scrape_and_post:
@@ -23,10 +24,54 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Install Playwright browsers
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          wget \
+          gnupg2 \
+          ca-certificates \
+          fonts-liberation \
+          xvfb || echo "Some packages may not be available, continuing..."
+          
+    - name: Install Playwright browsers (priority)
       run: |
         playwright install chromium
-        playwright install-deps chromium
+        playwright install-deps chromium || echo "Playwright deps installation completed with warnings"
+        
+    - name: Install Chrome for Selenium (fallback)
+      run: |
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable || echo "Chrome installation failed, using system browser"
+        
+    - name: Download Chromium for Pyppeteer (optional)
+      run: |
+        python -c "
+        import asyncio
+        try:
+            from pyppeteer import launch
+            print('Downloading Chromium for Pyppeteer...')
+            asyncio.get_event_loop().run_until_complete(launch())
+            print('Pyppeteer setup complete')
+        except Exception as e:
+            print(f'Pyppeteer setup failed: {e}')
+            print('Continuing without Pyppeteer...')
+        "
+        
+    - name: Check repository structure
+      run: |
+        echo "=== Current directory ==="
+        pwd
+        echo "=== Repository contents ==="
+        ls -la
+        echo "=== Source directory ==="
+        ls -la src/ || echo "src directory not found"
+        echo "=== Python files ==="
+        find . -name "*.py" -type f
+        echo "=== Requirements file ==="
+        cat requirements.txt || echo "requirements.txt not found"
         
     - name: Run WeatherNews Bot
       env:
@@ -34,10 +79,55 @@ jobs:
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        CHROME_BIN: /usr/bin/google-chrome-stable
+        CHROMEDRIVER_PATH: /usr/bin/chromedriver
       run: |
+        echo "=== ファイル検索開始 ==="
+        
+        # 実際のファイル構成 src/weather_bot.py を最優先で実行
         if [ -f "src/weather_bot.py" ]; then
+          echo "✅ Found: src/weather_bot.py"
+          echo "Executing: python src/weather_bot.py"
           python src/weather_bot.py
-        else
-          echo "ERROR: src/weather_bot.py not found!"
-          exit 1
+          exit 0
         fi
+        
+        # フォールバック: その他の可能な場所
+        if [ -f "weather_bot.py" ]; then
+          echo "✅ Found: weather_bot.py"
+          python weather_bot.py
+          exit 0
+        fi
+        
+        if [ -f "weathernews_bot.py" ]; then
+          echo "✅ Found: weathernews_bot.py"
+          python weathernews_bot.py
+          exit 0
+        fi
+        
+        if [ -f "src/weathernews_bot.py" ]; then
+          echo "✅ Found: src/weathernews_bot.py"
+          python src/weathernews_bot.py
+          exit 0
+        fi
+        
+        # ファイルが見つからない場合
+        echo "❌ ERROR: Python bot file not found!"
+        echo "=== Repository structure ==="
+        find . -name "*.py" -type f
+        echo "=== Current directory contents ==="
+        ls -la
+        if [ -d "src" ]; then
+          echo "=== src/ directory contents ==="
+          ls -la src/
+        fi
+        exit 1
+        
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: bot-results
+        path: |
+          bot_result.json
+        retention-days: 30
