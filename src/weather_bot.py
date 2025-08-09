@@ -26,7 +26,7 @@ class WeatherNewsBot:
         self.schedule_data = None
         
     def try_playwright_scraping(self):
-        """Playwright でスクレイピングを試行"""
+        """Playwright でスクレイピングを試行（強化版）"""
         try:
             from playwright.sync_api import sync_playwright
             
@@ -37,45 +37,85 @@ class WeatherNewsBot:
                 page = browser.new_page()
                 
                 page.set_extra_http_headers({
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 })
                 
-                page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(5000)
+                log(f"ページアクセス開始: {self.url}")
+                
+                # より確実なページ読み込み
+                page.goto(self.url, wait_until="networkidle", timeout=60000)
+                log("基本読み込み完了")
+                
+                # 要素が確実に読み込まれるまで待機
+                try:
+                    page.wait_for_selector('.boxStyle__item', timeout=30000)
+                    log("番組表要素の読み込み確認")
+                except:
+                    log("番組表要素の待機タイムアウト")
+                
+                # 追加の待機時間（JavaScriptの実行完了を待つ）
+                page.wait_for_timeout(10000)
+                log("追加待機完了")
+                
+                # デバッグ: ページタイトルを確認
+                title = page.title()
+                log(f"ページタイトル: {title}")
+                
+                # デバッグ: .boxStyle__item の数を確認
+                item_count = page.evaluate('document.querySelectorAll(".boxStyle__item").length')
+                log(f"検出された .boxStyle__item の数: {item_count}")
                 
                 # JavaScript で番組表データを正確に抽出
                 schedule_data = page.evaluate('''() => {
                     const result = [];
+                    console.log("JavaScript実行開始");
                     
                     // .boxStyle__item 内の番組情報を抽出
                     const items = document.querySelectorAll('.boxStyle__item');
+                    console.log("検出されたアイテム数:", items.length);
                     
-                    items.forEach(item => {
+                    items.forEach((item, index) => {
                         try {
+                            console.log(`アイテム ${index} 処理開始`);
+                            
                             // 時間情報を取得 (例: "05:00- ", "08:00- ")
                             const timeElements = item.querySelectorAll('p');
-                            if (!timeElements || timeElements.length === 0) return;
+                            if (!timeElements || timeElements.length === 0) {
+                                console.log(`アイテム ${index}: p要素なし`);
+                                return;
+                            }
                             
                             const timeText = timeElements[0].textContent.trim();
+                            console.log(`アイテム ${index}: 時間テキスト = "${timeText}"`);
+                            
                             const timeMatch = timeText.match(/(\\d{2}:\\d{2})-/);
-                            if (!timeMatch) return;
+                            if (!timeMatch) {
+                                console.log(`アイテム ${index}: 時間パターンなし`);
+                                return;
+                            }
                             
                             const timeStr = timeMatch[1];
+                            console.log(`アイテム ${index}: 抽出された時間 = ${timeStr}`);
                             
                             // 番組名を取得 (例: "ウェザーニュースLiVE・モーニング")
                             let programName = "ウェザーニュースLiVE";
                             const programElements = item.querySelectorAll('p.bold');
                             if (programElements.length > 0) {
                                 programName = programElements[0].textContent.trim();
+                                console.log(`アイテム ${index}: 番組名 = ${programName}`);
                             }
                             
                             // キャスターリンクを探す (href に "caster" を含む)
                             const casterLinks = item.querySelectorAll('a[href*="caster"]');
+                            console.log(`アイテム ${index}: キャスターリンク数 = ${casterLinks.length}`);
                             
                             if (casterLinks.length > 0) {
                                 const casterLink = casterLinks[0];
                                 const casterName = casterLink.textContent.trim();
                                 const casterUrl = casterLink.href;
+                                
+                                console.log(`アイテム ${index}: キャスター名 = "${casterName}"`);
+                                console.log(`アイテム ${index}: キャスターURL = ${casterUrl}`);
                                 
                                 // 有効なキャスター名かチェック (日本語文字を含む、適切な長さ)
                                 if (casterName && 
@@ -83,24 +123,32 @@ class WeatherNewsBot:
                                     casterName.length <= 20 &&
                                     /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
                                     
+                                    console.log(`アイテム ${index}: 有効なキャスター名として追加`);
                                     result.push({
                                         time: timeStr,
                                         caster: casterName,
                                         program: programName,
                                         profile_url: casterUrl
                                     });
+                                } else {
+                                    console.log(`アイテム ${index}: 無効なキャスター名: "${casterName}"`);
                                 }
+                            } else {
+                                console.log(`アイテム ${index}: キャスターリンクなし`);
                             }
                             
                         } catch (error) {
-                            // エラーは無視して次へ
+                            console.log(`アイテム ${index}: エラー =`, error);
                         }
                     });
                     
+                    console.log("最終結果:", result);
                     return result;
                 }''')
                 
                 browser.close()
+                
+                log(f"JavaScript実行結果: {len(schedule_data) if schedule_data else 0}件")
                 
                 if schedule_data and len(schedule_data) > 0:
                     for item in schedule_data:
@@ -109,10 +157,25 @@ class WeatherNewsBot:
                     return schedule_data
                 else:
                     log("Playwright: 有効なデータ取得なし")
+                    
+                    # デバッグ: ページの内容を一部出力
+                    try:
+                        page_content = page.content()
+                        if "番組表" in page_content:
+                            log("ページに「番組表」の文字を確認")
+                        if "boxStyle__item" in page_content:
+                            log("ページに「boxStyle__item」クラスを確認")
+                        else:
+                            log("警告: ページに「boxStyle__item」クラスが見つかりません")
+                    except:
+                        pass
+                    
                     return None
                     
         except Exception as e:
             log(f"Playwright エラー: {e}")
+            import traceback
+            log(f"詳細エラー: {traceback.format_exc()}")
             return None
     
     def get_fallback_schedule(self, partial_data=None):
