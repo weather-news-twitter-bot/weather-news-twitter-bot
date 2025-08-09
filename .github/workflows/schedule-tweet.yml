@@ -1,86 +1,74 @@
-# .github/workflows/schedule-tweet.yml
-name: Weather News Schedule Tweet Every 12 Hours
+name: WeatherNews Schedule Bot
+
 on:
   schedule:
-    - cron: '0 0,12 * * *'  # 毎日0時と12時(UTC)
-  workflow_dispatch:
-  
+    # 毎日朝6時に実行 (JST 15時 = UTC 6時)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # 手動実行も可能
+
 jobs:
-  tweet-schedule:
+  scrape_and_post:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+      
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-    
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install system dependencies (for Puppeteer fallback)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y chromium-browser
-    
-    - name: Install Python dependencies
+        python-version: '3.11'
+        
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-    
-    - name: Debug environment variables
+        
+    - name: Install Chrome dependencies
       run: |
-        echo "Checking environment variables..."
-        echo "TWITTER_API_KEY exists: $([[ -n "$TWITTER_API_KEY" ]] && echo "YES" || echo "NO")"
-        echo "TWITTER_API_SECRET exists: $([[ -n "$TWITTER_API_SECRET" ]] && echo "YES" || echo "NO")"
-        echo "TWITTER_ACCESS_TOKEN exists: $([[ -n "$TWITTER_ACCESS_TOKEN" ]] && echo "YES" || echo "NO")"
-        echo "TWITTER_ACCESS_TOKEN_SECRET exists: $([[ -n "$TWITTER_ACCESS_TOKEN_SECRET" ]] && echo "YES" || echo "NO")"
+        sudo apt-get update
+        sudo apt-get install -y \
+          chromium-browser \
+          chromium-chromedriver \
+          fonts-liberation \
+          libappindicator3-1 \
+          libasound2 \
+          libatk-bridge2.0-0 \
+          libdrm2 \
+          libgtk-3-0 \
+          libnspr4 \
+          libnss3 \
+          libxss1 \
+          libxtst6 \
+          xdg-utils
+          
+    - name: Download Chromium for Pyppeteer
+      run: |
+        python -c "import asyncio; from pyppeteer import launch; asyncio.get_event_loop().run_until_complete(launch())"
+        
+    - name: Run WeatherNews scraper (Selenium)
+      run: |
+        python selenium_weathernews_bot.py > selenium_output.json || echo "Selenium failed"
+        
+    - name: Run WeatherNews scraper (Pyppeteer)
+      run: |
+        python pyppeteer_weathernews_bot.py > pyppeteer_output.json || echo "Pyppeteer failed"
+        
+    - name: Post to Twitter/X
       env:
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-    
-    - name: Debug file structure
       run: |
-        echo "=== Current directory ==="
-        pwd
-        echo "=== Directory contents ==="
-        ls -la
-        echo "=== Looking for Python files ==="
-        find . -name "*.py" -type f
-        echo "=== Contents of src directory (if exists) ==="
-        ls -la src/ || echo "src directory does not exist"
-    
-    - name: Debug HTML structure
-      env:
-        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        DEBUG_MODE: true
-        PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
-      run: |
-        echo "🔍 HTMLデバッグモードで実行します..."
-        cd src
         python weather_bot.py
-    
-    - name: Post weather news schedule tweet
-      env:
-        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
-      run: |
-        echo "📤 ウェザーニュース番組表ツイートを投稿します..."
-        cd src
-        python weather_bot.py
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: scraping-results
+        path: |
+          selenium_output.json
+          pyppeteer_output.json
+        retention-days: 30
