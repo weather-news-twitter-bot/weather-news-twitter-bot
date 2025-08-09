@@ -10,11 +10,15 @@ import json
 import sys
 import re
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# 日本時間のタイムゾーン
+JST = timezone(timedelta(hours=9))
 
 def log(message):
     """ログ出力"""
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}", file=sys.stderr)
+    now_jst = datetime.now(JST)
+    print(f"[{now_jst.strftime('%H:%M:%S')}] {message}", file=sys.stderr)
 
 class WeatherNewsBot:
     def __init__(self):
@@ -362,27 +366,60 @@ class WeatherNewsBot:
         
         return programs
     
-    def get_program_name_by_time(self, time_str):
-        """時間帯から番組名を取得"""
+    def get_program_info_by_time(self, time_str):
+        """時間帯から番組名とアイコンを取得"""
         try:
             hour = int(time_str.split(':')[0])
             
-            if hour == 5:
-                return 'ウェザーニュースLiVE・モーニング'
-            elif hour == 8:
-                return 'ウェザーニュースLiVE・サンシャイン'
-            elif hour == 11:
-                return 'ウェザーニュースLiVE・コーヒータイム'
-            elif hour == 14:
-                return 'ウェザーニュースLiVE・アフタヌーン'
-            elif hour == 17:
-                return 'ウェザーニュースLiVE・イブニング'
-            elif hour == 20:
-                return 'ウェザーニュースLiVE・ムーン'
-            else:
-                return 'ウェザーニュースLiVE'
+            program_info = {
+                5: {
+                    'name': 'モーニング',
+                    'icon': '🌅',
+                    'full_name': 'ウェザーニュースLiVE・モーニング'
+                },
+                8: {
+                    'name': 'サンシャイン',
+                    'icon': '☀️',
+                    'full_name': 'ウェザーニュースLiVE・サンシャイン'
+                },
+                11: {
+                    'name': 'コーヒータイム',
+                    'icon': '☕',
+                    'full_name': 'ウェザーニュースLiVE・コーヒータイム'
+                },
+                14: {
+                    'name': 'アフタヌーン',
+                    'icon': '🌞',
+                    'full_name': 'ウェザーニュースLiVE・アフタヌーン'
+                },
+                17: {
+                    'name': 'イブニング',
+                    'icon': '🌆',
+                    'full_name': 'ウェザーニュースLiVE・イブニング'
+                },
+                20: {
+                    'name': 'ムーン',
+                    'icon': '🌙',
+                    'full_name': 'ウェザーニュースLiVE・ムーン'
+                }
+            }
+            
+            return program_info.get(hour, {
+                'name': 'LiVE',
+                'icon': '📺',
+                'full_name': 'ウェザーニュースLiVE'
+            })
         except:
-            return 'ウェザーニュースLiVE'
+            return {
+                'name': 'LiVE',
+                'icon': '📺',
+                'full_name': 'ウェザーニュースLiVE'
+            }
+    
+    def get_program_name_by_time(self, time_str):
+        """時間帯から番組名を取得（従来の関数、互換性のため残す）"""
+        program_info = self.get_program_info_by_time(time_str)
+        return program_info['full_name']
     
     def filter_todays_schedule(self, programs):
         """今日の番組のみを抽出（重複除去）"""
@@ -419,7 +456,7 @@ class WeatherNewsBot:
                 self.schedule_data = {
                     'programs': sorted(filtered_programs, key=lambda x: x['time']),
                     'source': 'playwright',
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now(JST).isoformat()
                 }
                 return self.schedule_data
         
@@ -432,7 +469,7 @@ class WeatherNewsBot:
                 self.schedule_data = {
                     'programs': sorted(filtered_programs, key=lambda x: x['time']),
                     'source': 'selenium',
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now(JST).isoformat()
                 }
                 return self.schedule_data
         
@@ -445,7 +482,7 @@ class WeatherNewsBot:
                 self.schedule_data = {
                     'programs': sorted(filtered_programs, key=lambda x: x['time']),
                     'source': 'pyppeteer',
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now(JST).isoformat()
                 }
                 return self.schedule_data
         
@@ -462,7 +499,7 @@ class WeatherNewsBot:
                 self.schedule_data = {
                     'programs': programs,
                     'source': 'consolidated_partial',
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now(JST).isoformat()
                 }
                 log(f"部分データ統合完了: {len(filtered_data)}件の実データ + フォールバック")
                 return self.schedule_data
@@ -472,18 +509,21 @@ class WeatherNewsBot:
         self.schedule_data = {
             'programs': programs,
             'source': 'fallback',
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(JST).isoformat()
         }
         log("完全フォールバックスケジュールを使用")
         return self.schedule_data
     
     def format_tweet_text(self):
-        """ツイート文を生成"""
+        """ツイート文を生成（アイコン付き、日本時間対応）"""
         if not self.schedule_data:
             return None
         
-        today = datetime.now().strftime('%Y年%m月%d日')
-        tweet_text = f"📺 {today} ウェザーニュースLiVE 番組表\n\n"
+        # 日本時間で日付を取得（24:00実行時は翌日の番組表）
+        now_jst = datetime.now(JST)
+        today_jst = now_jst.strftime('%Y年%m月%d日')
+        
+        tweet_text = f"📺 {today_jst} ウェザーニュースLiVE 番組表\n\n"
         
         programs = self.schedule_data['programs']
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
@@ -495,16 +535,20 @@ class WeatherNewsBot:
             if time_key in main_times:
                 caster_by_time[time_key] = program['caster']
         
-        # ツイート本文を構築 (実際のHTMLから分かった情報に基づく)
+        # ツイート本文を構築（番組アイコン付き）
         program_lines = []
         for time_str in main_times:
+            program_info = self.get_program_info_by_time(time_str)
+            icon = program_info['icon']
+            program_name = program_info['name']
+            
             if time_str in caster_by_time:
                 caster = caster_by_time[time_str]
                 # スペースを除去してよりコンパクトに
                 caster_clean = caster.replace(' ', '')
-                program_lines.append(f"{time_str}-{caster_clean}")
+                program_lines.append(f"{icon}{program_name} {time_str}- {caster_clean}")
             else:
-                program_lines.append(f"{time_str}-未定")
+                program_lines.append(f"{icon}{program_name} {time_str}- 未定")
         
         tweet_text += "\n".join(program_lines)
         tweet_text += "\n\n#ウェザーニュース #番組表"
@@ -513,15 +557,18 @@ class WeatherNewsBot:
         if len(tweet_text) > 280:
             log(f"ツイート文が長すぎます({len(tweet_text)}文字)。短縮します。")
             # 基本情報のみに短縮
-            tweet_text = f"📺 {today} ウェザーニュースLiVE 番組表\n\n"
+            tweet_text = f"📺 {today_jst} ウェザーニュースLiVE 番組表\n\n"
             
             # 最初の4つの時間帯のみ表示して文字数を抑える
             for time_str in main_times[:4]:
+                program_info = self.get_program_info_by_time(time_str)
+                icon = program_info['icon']
+                
                 if time_str in caster_by_time:
                     caster = caster_by_time[time_str].replace(' ', '')
-                    tweet_text += f"{time_str}-{caster}\n"
+                    tweet_text += f"{icon} {time_str}- {caster}\n"
                 else:
-                    tweet_text += f"{time_str}-未定\n"
+                    tweet_text += f"{icon} {time_str}- 未定\n"
             
             tweet_text += "※他の時間帯は番組表をご確認ください\n\n#ウェザーニュース #番組表"
         
@@ -598,7 +645,8 @@ class WeatherNewsBot:
                 'success': success,
                 'schedule_data': schedule_data,
                 'tweet_text': tweet_text,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now(JST).isoformat(),
+                'execution_date_jst': datetime.now(JST).strftime('%Y年%m月%d日')
             }
             
             with open('bot_result.json', 'w', encoding='utf-8') as f:
