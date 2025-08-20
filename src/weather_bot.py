@@ -98,16 +98,17 @@ class WeatherNewsBot:
                 page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_timeout(5000)
                 
-                # JavaScript で番組表データを正確に抽出
+                # JavaScript で番組表データを正確に抽出（改善版）
                 schedule_data = page.evaluate('''() => {
                     const result = [];
+                    const timeMap = new Map(); // 時間帯ごとの最新情報を保持
                     
                     // .boxStyle__item 内の番組情報を抽出
                     const items = document.querySelectorAll('.boxStyle__item');
                     
                     items.forEach(item => {
                         try {
-                            // 時間情報を取得 (例: "05:00- ", "08:00- ")
+                            // 時間情報を取得 (例: "05:00- ", "17:00- ただいま放送中")
                             const timeElements = item.querySelectorAll('p');
                             if (!timeElements || timeElements.length === 0) return;
                             
@@ -116,6 +117,9 @@ class WeatherNewsBot:
                             if (!timeMatch) return;
                             
                             const timeStr = timeMatch[1];
+                            
+                            // 放送中かどうかをチェック
+                            const isLive = timeText.includes('ただいま放送中') || timeText.includes('放送中');
                             
                             // 番組名を取得 (例: "ウェザーニュースLiVE・モーニング")
                             let programName = "ウェザーニュースLiVE";
@@ -138,18 +142,35 @@ class WeatherNewsBot:
                                     casterName.length <= 20 &&
                                     /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
                                     
-                                    result.push({
+                                    const itemData = {
                                         time: timeStr,
                                         caster: casterName,
                                         program: programName,
-                                        profile_url: casterUrl
-                                    });
+                                        profile_url: casterUrl,
+                                        isLive: isLive
+                                    };
+                                    
+                                    // 時間帯ごとに最新情報を更新
+                                    // 放送中でない項目を優先（翌日の番組として扱う）
+                                    if (!timeMap.has(timeStr) || (!isLive && timeMap.get(timeStr).isLive)) {
+                                        timeMap.set(timeStr, itemData);
+                                    }
                                 }
                             }
                             
                         } catch (error) {
                             // エラーは無視して次へ
                         }
+                    });
+                    
+                    // Mapから配列に変換
+                    timeMap.forEach(item => {
+                        result.push({
+                            time: item.time,
+                            caster: item.caster,
+                            program: item.program,
+                            profile_url: item.profile_url
+                        });
                     });
                     
                     return result;
@@ -213,7 +234,7 @@ class WeatherNewsBot:
             time.sleep(5)
             
             schedule_items = driver.find_elements(By.CLASS_NAME, "boxStyle__item")
-            programs = []
+            time_map = {}  # 時間帯ごとの最新情報を保持
             
             for item in schedule_items:
                 try:
@@ -228,6 +249,9 @@ class WeatherNewsBot:
                         continue
                     
                     time_str = time_match.group(1)
+                    
+                    # 放送中かどうかをチェック
+                    is_live = 'ただいま放送中' in time_text or '放送中' in time_text
                     
                     # 番組名の取得 (p.bold 要素)
                     program_name = "ウェザーニュースLiVE"
@@ -252,13 +276,20 @@ class WeatherNewsBot:
                                 len(caster_name) <= 20 and
                                 re.search(r'[ぁ-んァ-ヶ一-龯]', caster_name)):
                                 
-                                programs.append({
+                                item_data = {
                                     'time': time_str,
                                     'caster': caster_name,
                                     'program': program_name,
-                                    'profile_url': caster_url
-                                })
-                                log(f"Selenium 抽出: {time_str} - {caster_name}")
+                                    'profile_url': caster_url,
+                                    'is_live': is_live
+                                }
+                                
+                                # 時間帯ごとに最新情報を更新
+                                # 放送中でない項目を優先（翌日の番組として扱う）
+                                if time_str not in time_map or (not is_live and time_map[time_str].get('is_live', False)):
+                                    time_map[time_str] = item_data
+                                    log(f"Selenium 抽出: {time_str} - {caster_name} {'(放送中)' if is_live else ''}")
+                                
                                 break  # 1つの時間帯につき1人のキャスター
                         except:
                             continue
@@ -267,6 +298,16 @@ class WeatherNewsBot:
                     continue
             
             driver.quit()
+            
+            # 結果を配列に変換
+            programs = []
+            for time_str, item_data in time_map.items():
+                programs.append({
+                    'time': item_data['time'],
+                    'caster': item_data['caster'],
+                    'program': item_data['program'],
+                    'profile_url': item_data['profile_url']
+                })
             
             if programs:
                 log(f"Selenium 成功: {len(programs)}件取得")
@@ -301,9 +342,10 @@ class WeatherNewsBot:
             await page.goto(self.url, {'waitUntil': 'domcontentloaded', 'timeout': 60000})
             await asyncio.sleep(5)
             
-            # JavaScriptでデータを抽出 (実際のHTML構造に基づく)
+            # JavaScriptでデータを抽出（改善版）
             schedule_items = await page.evaluate('''() => {
                 const result = [];
+                const timeMap = new Map(); // 時間帯ごとの最新情報を保持
                 const items = document.querySelectorAll('.boxStyle__item');
                 
                 items.forEach(item => {
@@ -317,6 +359,9 @@ class WeatherNewsBot:
                         if (!timeMatch) return;
                         
                         const timeStr = timeMatch[1];
+                        
+                        // 放送中かどうかをチェック
+                        const isLive = timeText.includes('ただいま放送中') || timeText.includes('放送中');
                         
                         // 番組名を取得 (p.bold 要素)
                         let programName = "ウェザーニュースLiVE";
@@ -339,18 +384,35 @@ class WeatherNewsBot:
                                 casterName.length <= 20 &&
                                 /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
                                 
-                                result.push({
+                                const itemData = {
                                     time: timeStr,
                                     caster: casterName,
                                     program: programName,
-                                    profile_url: casterUrl
-                                });
+                                    profile_url: casterUrl,
+                                    isLive: isLive
+                                };
+                                
+                                // 時間帯ごとに最新情報を更新
+                                // 放送中でない項目を優先（翌日の番組として扱う）
+                                if (!timeMap.has(timeStr) || (!isLive && timeMap.get(timeStr).isLive)) {
+                                    timeMap.set(timeStr, itemData);
+                                }
                             }
                         }
                         
                     } catch (error) {
                         // エラーは無視
                     }
+                });
+                
+                // Mapから配列に変換
+                timeMap.forEach(item => {
+                    result.push({
+                        time: item.time,
+                        caster: item.caster,
+                        program: item.program,
+                        profile_url: item.profile_url
+                    });
                 });
                 
                 return result;
@@ -372,7 +434,7 @@ class WeatherNewsBot:
             return None
     
     def get_fallback_schedule(self, partial_data=None):
-        """フォールバック用スケジュール（部分データがあれば活用）"""
+        """フォールバック用スケジュール（部分データがあれば活用、不足分は「未定」）"""
         log("フォールバック: スケジュール生成")
         
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
@@ -387,29 +449,14 @@ class WeatherNewsBot:
                 if item.get('time') in main_times:
                     existing_casters[item['time']] = item.get('caster', '未定')
         
-        # 実際のHTMLから分かった今日のキャスター（フォールバック用）
-        # HTMLを参考に実在のキャスターを設定
-        known_schedule = {
-            '05:00': '青原桃香',
-            '08:00': '田辺真南葉', 
-            '11:00': '松本真央',
-            '14:00': '小林李衣奈',
-            '17:00': '岡本結子リサ',
-            '20:00': '山岸愛梨'
-        }
-        
         # 各時間帯にキャスターを割り当て
         for time_str in main_times:
             if time_str in existing_casters:
                 # 実際に取得できたデータを使用
                 caster_name = existing_casters[time_str]
                 log(f"実データ使用: {time_str} - {caster_name}")
-            elif time_str in known_schedule:
-                # 既知のスケジュールを使用
-                caster_name = known_schedule[time_str]
-                log(f"既知スケジュール: {time_str} - {caster_name}")
             else:
-                # それでもない場合は「未定」
+                # 取得できなかった場合は「未定」
                 caster_name = '未定'
                 log(f"未定: {time_str}")
             
