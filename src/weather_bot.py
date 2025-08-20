@@ -3,6 +3,7 @@
 """
 ウェザーニュース番組表スクレイピング＆Twitter投稿 統合版
 Playwright → Selenium → Pyppeteer の順で試行し、最初に成功したデータでツイート投稿
+環境変数による対象日制御対応版
 """
 
 import os
@@ -24,6 +25,60 @@ class WeatherNewsBot:
     def __init__(self):
         self.url = "https://weathernews.jp/wnl/timetable.html"
         self.schedule_data = None
+        
+        # デバッグ情報出力
+        log(f"現在時刻: {datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"対象日制御モード: {os.getenv('SCHEDULE_TARGET_MODE', 'auto')}")
+        log(f"判定時刻: {os.getenv('SCHEDULE_THRESHOLD_HOUR', '18')}:00")
+        if os.getenv('SCHEDULE_TARGET_DATE'):
+            log(f"明示的指定日: {os.getenv('SCHEDULE_TARGET_DATE')}")
+    
+    def get_target_date_with_env_control(self):
+        """
+        環境変数を使用した対象日制御
+        
+        環境変数:
+            SCHEDULE_TARGET_MODE: 'today', 'tomorrow', 'auto' (デフォルト: 'auto')
+            SCHEDULE_THRESHOLD_HOUR: auto mode時の判定時刻 (デフォルト: 18)
+            SCHEDULE_TARGET_DATE: 明示的な日付指定 (YYYY-MM-DD形式、優先度最高)
+        
+        Returns:
+            tuple: (対象日のdatetimeオブジェクト, 表示用文字列)
+        """
+        now_jst = datetime.now(JST)
+        
+        # 明示的な日付指定がある場合
+        target_date_env = os.getenv('SCHEDULE_TARGET_DATE')
+        if target_date_env:
+            try:
+                target_date = datetime.strptime(target_date_env, '%Y-%m-%d')
+                target_date = target_date.replace(tzinfo=JST)
+                target_date_str = target_date.strftime('%Y年%m月%d日')
+                log(f"環境変数で指定された日付を使用: {target_date_str}")
+                return target_date, target_date_str
+            except ValueError:
+                log(f"環境変数SCHEDULE_TARGET_DATEの形式が不正です: {target_date_env}")
+        
+        # モード指定
+        target_mode = os.getenv('SCHEDULE_TARGET_MODE', 'auto').lower()
+        threshold_hour = int(os.getenv('SCHEDULE_THRESHOLD_HOUR', '18'))
+        
+        if target_mode == 'tomorrow':
+            target_date = now_jst + timedelta(days=1)
+            log(f"モード指定により翌日({target_date.strftime('%m月%d日')})の番組表を対象とします")
+        elif target_mode == 'today':
+            target_date = now_jst
+            log(f"モード指定により当日({target_date.strftime('%m月%d日')})の番組表を対象とします")
+        else:  # auto mode
+            if now_jst.hour >= threshold_hour:
+                target_date = now_jst + timedelta(days=1)
+                log(f"{threshold_hour}:00以降の実行のため翌日({target_date.strftime('%m月%d日')})の番組表を対象とします")
+            else:
+                target_date = now_jst
+                log(f"{threshold_hour}:00より前の実行のため当日({target_date.strftime('%m月%d日')})の番組表を対象とします")
+        
+        target_date_str = target_date.strftime('%Y年%m月%d日')
+        return target_date, target_date_str
         
     def try_playwright_scraping(self):
         """Playwright でスクレイピングを試行"""
@@ -515,15 +570,14 @@ class WeatherNewsBot:
         return self.schedule_data
     
     def format_tweet_text(self):
-        """ツイート文を生成（シンプル版、日本時間対応）"""
+        """ツイート文を生成（環境変数制御対応版）"""
         if not self.schedule_data:
             return None
         
-        # 日本時間で日付を取得（24:00実行時は翌日の番組表）
-        now_jst = datetime.now(JST)
-        today_jst = now_jst.strftime('%Y年%m月%d日')
+        # 対象日を取得（環境変数制御）
+        target_date, target_date_str = self.get_target_date_with_env_control()
         
-        tweet_text = f"📺 {today_jst} WNL番組表\n\n"
+        tweet_text = f"📺 {target_date_str} WNL番組表\n\n"
         
         programs = self.schedule_data['programs']
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
@@ -553,7 +607,7 @@ class WeatherNewsBot:
         if len(tweet_text) > 280:
             log(f"ツイート文が長すぎます({len(tweet_text)}文字)。短縮します。")
             # 基本情報のみに短縮
-            tweet_text = f"📺 {today_jst} WNL番組表\n\n"
+            tweet_text = f"📺 {target_date_str} WNL番組表\n\n"
             
             # 最初の4つの時間帯のみ表示して文字数を抑える
             for time_str in main_times[:4]:
@@ -634,18 +688,23 @@ class WeatherNewsBot:
             success = self.post_to_twitter(tweet_text)
             
             # 結果を保存
+            target_date, target_date_str = self.get_target_date_with_env_control()
             result = {
                 'success': success,
                 'schedule_data': schedule_data,
                 'tweet_text': tweet_text,
                 'timestamp': datetime.now(JST).isoformat(),
-                'execution_date_jst': datetime.now(JST).strftime('%Y年%m月%d日')
+                'execution_date_jst': datetime.now(JST).strftime('%Y年%m月%d日'),
+                'target_date_jst': target_date_str,
+                'target_mode': os.getenv('SCHEDULE_TARGET_MODE', 'auto'),
+                'threshold_hour': os.getenv('SCHEDULE_THRESHOLD_HOUR', '18')
             }
             
             with open('bot_result.json', 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             
             log(f"=== 実行完了 ===")
+            log(f"対象日: {target_date_str}")
             log(f"ツイート投稿: {'成功' if success else '失敗'}")
             
             return success
