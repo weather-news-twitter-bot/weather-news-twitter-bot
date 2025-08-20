@@ -6,8 +6,6 @@ on:
   schedule:
     # 18:00に翌日の番組表を投稿
     - cron: '0 9 * * *'  # UTC 9:00 = JST 18:00
-    # 必要に応じて24:00にも投稿する場合
-    # - cron: '0 15 * * *' # UTC 15:00 = JST 24:00
   
   # 手動実行も可能にする
   workflow_dispatch:
@@ -44,104 +42,19 @@ jobs:
       with:
         python-version: '3.11'
     
+
     - name: Install dependencies
       run: |
         pip install playwright selenium pyppeteer tweepy webdriver-manager
         playwright install chromium
     
-    - name: Run Weather News Bot (18:00 - Tomorrow)
+    - name: Run Weather News Bot
       env:
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        # 18:00実行時は翌日の番組表を対象とする
-        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'tomorrow' }}
+        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'auto' }}
         SCHEDULE_TARGET_DATE: ${{ github.event.inputs.target_date }}
         SCHEDULE_THRESHOLD_HOUR: ${{ github.event.inputs.threshold_hour || '18' }}
-      run: python weather_news_bot.py
-
----
-# 複数のスケジュールで実行する場合の例
-name: Weather News Bot - Multiple Schedule
-
-on:
-  schedule:
-    # 18:00に翌日の番組表を投稿
-    - cron: '0 9 * * *'   # UTC 9:00 = JST 18:00
-    # 6:00に当日の番組表を投稿（朝の確認用）
-    - cron: '0 21 * * *'  # UTC 21:00 = JST 6:00
-  
-  workflow_dispatch:
-    inputs:
-      target_mode:
-        description: '対象日モード'
-        required: false
-        default: 'auto'
-        type: choice
-        options:
-          - auto
-          - today
-          - tomorrow
-      target_date:
-        description: '明示的な対象日 (YYYY-MM-DD形式)'
-        required: false
-        type: string
-
-jobs:
-  # 18:00実行（翌日の番組表）
-  post_tomorrow_schedule:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch'
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        pip install playwright selenium pyppeteer tweepy webdriver-manager
-        playwright install chromium
-    
-    - name: Run Bot (Tomorrow Schedule)
-      env:
-        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'tomorrow' }}
-        SCHEDULE_TARGET_DATE: ${{ github.event.inputs.target_date }}
-      run: python weather_news_bot.py
-
-  # 6:00実行（当日の番組表確認）
-  post_today_schedule:
-    runs-on: ubuntu-latest
-    if: github.event.schedule == '0 21 * * *'
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        pip install playwright selenium pyppeteer tweepy webdriver-manager
-        playwright install chromium
-    
-    - name: Run Bot (Today Schedule)
-      env:
-        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        SCHEDULE_TARGET_MODE: 'today'  # 明示的に当日を指定
-      run: python weather_news_bot.py
+      run: python weather_bot.py
