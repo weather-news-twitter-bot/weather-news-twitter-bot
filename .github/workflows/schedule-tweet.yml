@@ -57,4 +57,4 @@ jobs:
         SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'auto' }}
         SCHEDULE_TARGET_DATE: ${{ github.event.inputs.target_date }}
         SCHEDULE_THRESHOLD_HOUR: ${{ github.event.inputs.threshold_hour || '18' }}
-      run: python weather_bot.py
+      run: python src/weather_bot.py
