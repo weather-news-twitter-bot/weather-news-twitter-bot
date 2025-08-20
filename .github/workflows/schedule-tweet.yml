@@ -5,7 +5,7 @@ name: Weather News Bot
 on:
   schedule:
     # 18:00に翌日の番組表を投稿
-    - cron: '0 9 * * *'  # UTC 9:00 = JST 18:00
+    - cron: '0 10 * * *'  # UTC 9:00 = JST 18:00
   
   # 手動実行も可能にする
   workflow_dispatch:
