@@ -98,17 +98,16 @@ class WeatherNewsBot:
                 page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_timeout(5000)
                 
-                # JavaScript で番組表データを正確に抽出（改善版）
+                # JavaScript で番組表データを順序に基づいて抽出
                 schedule_data = page.evaluate('''() => {
                     const result = [];
-                    const timeMap = new Map(); // 時間帯ごとの最新情報を保持
-                    
-                    // .boxStyle__item 内の番組情報を抽出
                     const items = document.querySelectorAll('.boxStyle__item');
+                    const mainTimes = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00'];
+                    let foundNextDay = false;
                     
                     items.forEach(item => {
                         try {
-                            // 時間情報を取得 (例: "05:00- ", "17:00- ただいま放送中")
+                            // 時間情報を取得
                             const timeElements = item.querySelectorAll('p');
                             if (!timeElements || timeElements.length === 0) return;
                             
@@ -118,61 +117,63 @@ class WeatherNewsBot:
                             
                             const timeStr = timeMatch[1];
                             
-                            // 放送中かどうかをチェック
-                            const isLive = timeText.includes('ただいま放送中') || timeText.includes('放送中');
-                            
-                            // 番組名を取得 (例: "ウェザーニュースLiVE・モーニング")
+                            // 番組名を取得
                             let programName = "ウェザーニュースLiVE";
                             const programElements = item.querySelectorAll('p.bold');
                             if (programElements.length > 0) {
                                 programName = programElements[0].textContent.trim();
                             }
                             
-                            // キャスターリンクを探す (href に "caster" を含む)
-                            const casterLinks = item.querySelectorAll('a[href*="caster"]');
+                            // モーニング番組を検出したら翌日分開始
+                            if (programName.includes('モーニング') && !foundNextDay) {
+                                foundNextDay = true;
+                                console.log('翌日分開始: ' + timeStr + ' - ' + programName);
+                            }
                             
-                            if (casterLinks.length > 0) {
-                                const casterLink = casterLinks[0];
-                                const casterName = casterLink.textContent.trim();
-                                const casterUrl = casterLink.href;
+                            // 翌日分かつ主要時間帯のみ収集
+                            if (foundNextDay && mainTimes.includes(timeStr)) {
+                                // キャスターリンクを探す
+                                const casterLinks = item.querySelectorAll('a[href*="caster"]');
                                 
-                                // 有効なキャスター名かチェック (日本語文字を含む、適切な長さ)
-                                if (casterName && 
-                                    casterName.length >= 2 && 
-                                    casterName.length <= 20 &&
-                                    /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
+                                if (casterLinks.length > 0) {
+                                    const casterLink = casterLinks[0];
+                                    const casterName = casterLink.textContent.trim();
+                                    const casterUrl = casterLink.href;
                                     
-                                    const itemData = {
-                                        time: timeStr,
-                                        caster: casterName,
-                                        program: programName,
-                                        profile_url: casterUrl,
-                                        isLive: isLive
-                                    };
-                                    
-                                    // 時間帯ごとに最新情報を更新
-                                    // 放送中でない項目を優先（翌日の番組として扱う）
-                                    if (!timeMap.has(timeStr) || (!isLive && timeMap.get(timeStr).isLive)) {
-                                        timeMap.set(timeStr, itemData);
+                                    // 有効なキャスター名かチェック
+                                    if (casterName && 
+                                        casterName.length >= 2 && 
+                                        casterName.length <= 20 &&
+                                        /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
+                                        
+                                        result.push({
+                                            time: timeStr,
+                                            caster: casterName,
+                                            program: programName,
+                                            profile_url: casterUrl
+                                        });
+                                        
+                                        console.log('翌日分取得: ' + timeStr + ' - ' + casterName);
                                     }
+                                } else {
+                                    // キャスター情報がない場合
+                                    result.push({
+                                        time: timeStr,
+                                        caster: '未定',
+                                        program: programName,
+                                        profile_url: ''
+                                    });
+                                    
+                                    console.log('翌日分取得(未定): ' + timeStr);
                                 }
                             }
                             
                         } catch (error) {
-                            // エラーは無視して次へ
+                            console.error('アイテム処理エラー:', error);
                         }
                     });
                     
-                    // Mapから配列に変換
-                    timeMap.forEach(item => {
-                        result.push({
-                            time: item.time,
-                            caster: item.caster,
-                            program: item.program,
-                            profile_url: item.profile_url
-                        });
-                    });
-                    
+                    console.log('取得完了:', result.length + '件');
                     return result;
                 }''')
                 
@@ -234,7 +235,9 @@ class WeatherNewsBot:
             time.sleep(5)
             
             schedule_items = driver.find_elements(By.CLASS_NAME, "boxStyle__item")
-            time_map = {}  # 時間帯ごとの最新情報を保持
+            programs = []
+            main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
+            found_next_day = False
             
             for item in schedule_items:
                 try:
@@ -250,9 +253,6 @@ class WeatherNewsBot:
                     
                     time_str = time_match.group(1)
                     
-                    # 放送中かどうかをチェック
-                    is_live = 'ただいま放送中' in time_text or '放送中' in time_text
-                    
                     # 番組名の取得 (p.bold 要素)
                     program_name = "ウェザーニュースLiVE"
                     try:
@@ -262,11 +262,18 @@ class WeatherNewsBot:
                     except:
                         pass
                     
-                    # キャスターリンクを探す (href に caster を含むもの)
-                    caster_links = item.find_elements(By.CSS_SELECTOR, "a[href*='caster']")
+                    # モーニング番組を検出したら翌日分開始
+                    if 'モーニング' in program_name and not found_next_day:
+                        found_next_day = True
+                        log(f"翌日分開始: {time_str} - {program_name}")
                     
-                    for caster_link in caster_links:
-                        try:
+                    # 翌日分かつ主要時間帯のみ収集
+                    if found_next_day and time_str in main_times:
+                        # キャスターリンクを探す (href に caster を含むもの)
+                        caster_links = item.find_elements(By.CSS_SELECTOR, "a[href*='caster']")
+                        
+                        if caster_links:
+                            caster_link = caster_links[0]
                             caster_name = caster_link.text.strip()
                             caster_url = caster_link.get_attribute('href')
                             
@@ -276,38 +283,35 @@ class WeatherNewsBot:
                                 len(caster_name) <= 20 and
                                 re.search(r'[ぁ-んァ-ヶ一-龯]', caster_name)):
                                 
-                                item_data = {
+                                programs.append({
                                     'time': time_str,
                                     'caster': caster_name,
                                     'program': program_name,
-                                    'profile_url': caster_url,
-                                    'is_live': is_live
-                                }
-                                
-                                # 時間帯ごとに最新情報を更新
-                                # 放送中でない項目を優先（翌日の番組として扱う）
-                                if time_str not in time_map or (not is_live and time_map[time_str].get('is_live', False)):
-                                    time_map[time_str] = item_data
-                                    log(f"Selenium 抽出: {time_str} - {caster_name} {'(放送中)' if is_live else ''}")
-                                
-                                break  # 1つの時間帯につき1人のキャスター
-                        except:
-                            continue
+                                    'profile_url': caster_url
+                                })
+                                log(f"Selenium 抽出: {time_str} - {caster_name}")
+                            else:
+                                programs.append({
+                                    'time': time_str,
+                                    'caster': '未定',
+                                    'program': program_name,
+                                    'profile_url': ''
+                                })
+                                log(f"Selenium 抽出(未定): {time_str}")
+                        else:
+                            # キャスター情報がない場合
+                            programs.append({
+                                'time': time_str,
+                                'caster': '未定',
+                                'program': program_name,
+                                'profile_url': ''
+                            })
+                            log(f"Selenium 抽出(未定): {time_str}")
                 
                 except Exception as e:
                     continue
             
             driver.quit()
-            
-            # 結果を配列に変換
-            programs = []
-            for time_str, item_data in time_map.items():
-                programs.append({
-                    'time': item_data['time'],
-                    'caster': item_data['caster'],
-                    'program': item_data['program'],
-                    'profile_url': item_data['profile_url']
-                })
             
             if programs:
                 log(f"Selenium 成功: {len(programs)}件取得")
@@ -342,11 +346,12 @@ class WeatherNewsBot:
             await page.goto(self.url, {'waitUntil': 'domcontentloaded', 'timeout': 60000})
             await asyncio.sleep(5)
             
-            # JavaScriptでデータを抽出（改善版）
+            # JavaScriptでデータを抽出（順序ベース）
             schedule_items = await page.evaluate('''() => {
                 const result = [];
-                const timeMap = new Map(); // 時間帯ごとの最新情報を保持
                 const items = document.querySelectorAll('.boxStyle__item');
+                const mainTimes = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00'];
+                let foundNextDay = false;
                 
                 items.forEach(item => {
                     try {
@@ -360,9 +365,6 @@ class WeatherNewsBot:
                         
                         const timeStr = timeMatch[1];
                         
-                        // 放送中かどうかをチェック
-                        const isLive = timeText.includes('ただいま放送中') || timeText.includes('放送中');
-                        
                         // 番組名を取得 (p.bold 要素)
                         let programName = "ウェザーニュースLiVE";
                         const programElements = item.querySelectorAll('p.bold');
@@ -370,51 +372,65 @@ class WeatherNewsBot:
                             programName = programElements[0].textContent.trim();
                         }
                         
-                        // キャスターリンクを探す (href に "caster" を含む)
-                        const casterLinks = item.querySelectorAll('a[href*="caster"]');
+                        // モーニング番組を検出したら翌日分開始
+                        if (programName.includes('モーニング') && !foundNextDay) {
+                            foundNextDay = true;
+                            console.log('翌日分開始: ' + timeStr + ' - ' + programName);
+                        }
                         
-                        if (casterLinks.length > 0) {
-                            const casterLink = casterLinks[0];
-                            const casterName = casterLink.textContent.trim();
-                            const casterUrl = casterLink.href;
+                        // 翌日分かつ主要時間帯のみ収集
+                        if (foundNextDay && mainTimes.includes(timeStr)) {
+                            // キャスターリンクを探す (href に "caster" を含む)
+                            const casterLinks = item.querySelectorAll('a[href*="caster"]');
                             
-                            // 有効なキャスター名かチェック
-                            if (casterName && 
-                                casterName.length >= 2 && 
-                                casterName.length <= 20 &&
-                                /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
+                            if (casterLinks.length > 0) {
+                                const casterLink = casterLinks[0];
+                                const casterName = casterLink.textContent.trim();
+                                const casterUrl = casterLink.href;
                                 
-                                const itemData = {
-                                    time: timeStr,
-                                    caster: casterName,
-                                    program: programName,
-                                    profile_url: casterUrl,
-                                    isLive: isLive
-                                };
-                                
-                                // 時間帯ごとに最新情報を更新
-                                // 放送中でない項目を優先（翌日の番組として扱う）
-                                if (!timeMap.has(timeStr) || (!isLive && timeMap.get(timeStr).isLive)) {
-                                    timeMap.set(timeStr, itemData);
+                                // 有効なキャスター名かチェック
+                                if (casterName && 
+                                    casterName.length >= 2 && 
+                                    casterName.length <= 20 &&
+                                    /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
+                                    
+                                    result.push({
+                                        time: timeStr,
+                                        caster: casterName,
+                                        program: programName,
+                                        profile_url: casterUrl
+                                    });
+                                    
+                                    console.log('翌日分取得: ' + timeStr + ' - ' + casterName);
+                                } else {
+                                    result.push({
+                                        time: timeStr,
+                                        caster: '未定',
+                                        program: programName,
+                                        profile_url: ''
+                                    });
+                                    
+                                    console.log('翌日分取得(未定): ' + timeStr);
                                 }
+                            } else {
+                                // キャスター情報がない場合
+                                result.push({
+                                    time: timeStr,
+                                    caster: '未定',
+                                    program: programName,
+                                    profile_url: ''
+                                });
+                                
+                                console.log('翌日分取得(未定): ' + timeStr);
                             }
                         }
                         
                     } catch (error) {
-                        // エラーは無視
+                        console.error('アイテム処理エラー:', error);
                     }
                 });
                 
-                // Mapから配列に変換
-                timeMap.forEach(item => {
-                    result.push({
-                        time: item.time,
-                        caster: item.caster,
-                        program: item.program,
-                        profile_url: item.profile_url
-                    });
-                });
-                
+                console.log('取得完了:', result.length + '件');
                 return result;
             }''')
             
@@ -524,21 +540,15 @@ class WeatherNewsBot:
         return program_info['full_name']
     
     def filter_todays_schedule(self, programs):
-        """今日の番組のみを抽出（重複除去）"""
+        """主要時間帯の番組のみを抽出（重複除去は不要）"""
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
         
-        # 時間帯別にキャスターを整理（最初に見つかったものを採用）
-        time_caster_map = {}
+        # 主要時間帯のみフィルタリング
+        filtered_programs = []
         for program in programs:
             time_key = program['time']
-            if time_key in main_times and time_key not in time_caster_map:
-                time_caster_map[time_key] = program
-        
-        # 今日の番組として返す
-        filtered_programs = []
-        for time_str in main_times:
-            if time_str in time_caster_map:
-                filtered_programs.append(time_caster_map[time_str])
+            if time_key in main_times:
+                filtered_programs.append(program)
         
         return filtered_programs
 
