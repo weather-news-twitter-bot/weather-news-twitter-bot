@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ウェザーニュース番組表スクレイピング＆Twitter投稿 統合版
-Playwright → Selenium → Pyppeteer の順で試行し、最初に成功したデータでツイート投稿
-環境変数による対象日制御対応版
+ウェザーニュース番組表スクレイピング＆Twitter投稿 統合版（2025安定化版）
+- Playwright Async → Selenium Stealth → フォールバック
+- 全キャスター未定ならツイートスキップ
+- 環境変数による対象日制御対応
 """
-
 import os
 import json
 import sys
@@ -25,29 +25,17 @@ class WeatherNewsBot:
     def __init__(self):
         self.url = "https://weathernews.jp/wnl/timetable.html"
         self.schedule_data = None
-        
+       
         # デバッグ情報出力
         log(f"現在時刻: {datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')}")
         log(f"対象日制御モード: {os.getenv('SCHEDULE_TARGET_MODE', 'auto')}")
         log(f"判定時刻: {os.getenv('SCHEDULE_THRESHOLD_HOUR', '18')}:00")
         if os.getenv('SCHEDULE_TARGET_DATE'):
             log(f"明示的指定日: {os.getenv('SCHEDULE_TARGET_DATE')}")
-    
+
     def get_target_date_with_env_control(self):
-        """
-        環境変数を使用した対象日制御
-        
-        環境変数:
-            SCHEDULE_TARGET_MODE: 'today', 'tomorrow', 'auto' (デフォルト: 'auto')
-            SCHEDULE_THRESHOLD_HOUR: auto mode時の判定時刻 (デフォルト: 18)
-            SCHEDULE_TARGET_DATE: 明示的な日付指定 (YYYY-MM-DD形式、優先度最高)
-        
-        Returns:
-            tuple: (対象日のdatetimeオブジェクト, 表示用文字列)
-        """
+        """環境変数による対象日制御（変更なし）"""
         now_jst = datetime.now(JST)
-        
-        # 明示的な日付指定がある場合
         target_date_env = os.getenv('SCHEDULE_TARGET_DATE')
         if target_date_env:
             try:
@@ -58,11 +46,10 @@ class WeatherNewsBot:
                 return target_date, target_date_str
             except ValueError:
                 log(f"環境変数SCHEDULE_TARGET_DATEの形式が不正です: {target_date_env}")
-        
-        # モード指定
+       
         target_mode = os.getenv('SCHEDULE_TARGET_MODE', 'auto').lower()
         threshold_hour = int(os.getenv('SCHEDULE_THRESHOLD_HOUR', '18'))
-        
+       
         if target_mode == 'tomorrow':
             target_date = now_jst + timedelta(days=1)
             log(f"モード指定により翌日({target_date.strftime('%m月%d日')})の番組表を対象とします")
@@ -76,109 +63,92 @@ class WeatherNewsBot:
             else:
                 target_date = now_jst
                 log(f"{threshold_hour}:00より前の実行のため当日({target_date.strftime('%m月%d日')})の番組表を対象とします")
-        
+       
         target_date_str = target_date.strftime('%Y年%m月%d日')
         return target_date, target_date_str
-        
-    def try_playwright_scraping(self):
-        """Playwright でスクレイピングを試行"""
+
+    async def try_playwright_scraping(self):
+        """Playwright Async でスクレイピングを試行"""
         try:
-            from playwright.sync_api import sync_playwright
-            
-            log("Playwright でスクレイピング開始...")
-            
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
-                
-                page.set_extra_http_headers({
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                })
-                
-                page.goto(self.url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(5000)
-                
-                # JavaScript で番組表データを順序に基づいて抽出
-                schedule_data = page.evaluate('''() => {
+            from playwright.async_api import async_playwright
+            log("Playwright Async でスクレイピング開始...")
+           
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=['--disable-blink-features=AutomationControlled']
+                )
+                context = await browser.new_context(
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+                    viewport={'width': 1920, 'height': 1080}
+                )
+                page = await context.new_page()
+               
+                await page.goto(self.url, wait_until="networkidle", timeout=90000)
+                await page.wait_for_timeout(10000)
+                await page.screenshot(path='debug_playwright.png', full_page=True)
+               
+                schedule_data = await page.evaluate('''() => {
                     const result = [];
                     const items = document.querySelectorAll('.boxStyle__item');
                     const mainTimes = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00'];
                     let foundNextDay = false;
-                    
+                   
                     items.forEach(item => {
                         try {
-                            // 時間情報を取得
                             const timeElements = item.querySelectorAll('p');
                             if (!timeElements || timeElements.length === 0) return;
-                            
+                           
                             const timeText = timeElements[0].textContent.trim();
                             const timeMatch = timeText.match(/(\\d{2}:\\d{2})-/);
                             if (!timeMatch) return;
-                            
+                           
                             const timeStr = timeMatch[1];
-                            
-                            // 番組名を取得
+                           
                             let programName = "ウェザーニュースLiVE";
                             const programElements = item.querySelectorAll('p.bold');
                             if (programElements.length > 0) {
                                 programName = programElements[0].textContent.trim();
                             }
-                            
-                            // モーニング番組を検出したら翌日分開始
+                           
                             if (programName.includes('モーニング') && !foundNextDay) {
                                 foundNextDay = true;
-                                console.log('翌日分開始: ' + timeStr + ' - ' + programName);
                             }
-                            
-                            // 翌日分かつ主要時間帯のみ収集
+                           
                             if (foundNextDay && mainTimes.includes(timeStr)) {
-                                // キャスターリンクを探す
                                 const casterLinks = item.querySelectorAll('a[href*="caster"]');
-                                
+                               
                                 if (casterLinks.length > 0) {
                                     const casterLink = casterLinks[0];
                                     const casterName = casterLink.textContent.trim();
                                     const casterUrl = casterLink.href;
-                                    
-                                    // 有効なキャスター名かチェック
-                                    if (casterName && 
-                                        casterName.length >= 2 && 
-                                        casterName.length <= 20 &&
-                                        /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
-                                        
+                                   
+                                    if (casterName && casterName.length >= 2 && /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
                                         result.push({
                                             time: timeStr,
                                             caster: casterName,
                                             program: programName,
                                             profile_url: casterUrl
                                         });
-                                        
-                                        console.log('翌日分取得: ' + timeStr + ' - ' + casterName);
                                     }
                                 } else {
-                                    // キャスター情報がない場合
                                     result.push({
                                         time: timeStr,
                                         caster: '未定',
                                         program: programName,
                                         profile_url: ''
                                     });
-                                    
-                                    console.log('翌日分取得(未定): ' + timeStr);
                                 }
                             }
-                            
                         } catch (error) {
                             console.error('アイテム処理エラー:', error);
                         }
                     });
-                    
-                    console.log('取得完了:', result.length + '件');
                     return result;
                 }''')
-                
-                browser.close()
-                
+               
+                await browser.close()
+               
                 if schedule_data and len(schedule_data) > 0:
                     for item in schedule_data:
                         log(f"Playwright 抽出: {item['time']} - {item['caster']}")
@@ -187,102 +157,82 @@ class WeatherNewsBot:
                 else:
                     log("Playwright: 有効なデータ取得なし")
                     return None
-                    
+                   
         except Exception as e:
             log(f"Playwright エラー: {e}")
             return None
-    
+
     def try_selenium_scraping(self):
-        """Selenium でスクレイピングを試行"""
+        """Selenium Stealth でスクレイピングを試行"""
         try:
-            from selenium import webdriver
+            import undetected_chromedriver as uc
             from selenium.webdriver.common.by import By
-            from selenium.webdriver.chrome.options import Options
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
-            from webdriver_manager.chrome import ChromeDriverManager
-            from selenium.webdriver.chrome.service import Service
-            
-            log("Selenium でスクレイピング開始...")
-            
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
-            
-            # ChromeDriverの自動管理
-            try:
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=chrome_options)
-            except:
-                # フォールバック: システムのchromedriver
-                driver = webdriver.Chrome(options=chrome_options)
-            
-            driver.set_page_load_timeout(60)
-            
+           
+            log("Selenium Stealth でスクレイピング開始...")
+           
+            options = uc.ChromeOptions()
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1920,1080")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option('useAutomationExtension', False)
+            options.add_argument("--disable-renderer-timeout")
+           
+            driver = uc.Chrome(options=options, headless=False)  # テスト時はFalse
+           
+            driver.set_page_load_timeout(120)
+            driver.implicitly_wait(15)
+           
             driver.get(self.url)
-            
-            WebDriverWait(driver, 30).until(
+           
+            WebDriverWait(driver, 60).until(
                 EC.presence_of_element_located((By.CLASS_NAME, "boxStyle__item"))
             )
-            
+           
             import time
-            time.sleep(5)
-            
+            time.sleep(15)
+            driver.save_screenshot('debug_selenium.png')
+           
             schedule_items = driver.find_elements(By.CLASS_NAME, "boxStyle__item")
             programs = []
             main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
             found_next_day = False
-            
+           
             for item in schedule_items:
                 try:
-                    # 時間の取得 (最初の p タグ)
                     time_elements = item.find_elements(By.TAG_NAME, "p")
                     if not time_elements:
                         continue
-                    
+                   
                     time_text = time_elements[0].text.strip()
                     time_match = re.search(r'(\d{2}:\d{2})-', time_text)
                     if not time_match:
                         continue
-                    
+                   
                     time_str = time_match.group(1)
-                    
-                    # 番組名の取得 (p.bold 要素)
+                   
                     program_name = "ウェザーニュースLiVE"
-                    try:
-                        program_elements = item.find_elements(By.CSS_SELECTOR, "p.bold")
-                        if program_elements:
-                            program_name = program_elements[0].text.strip()
-                    except:
-                        pass
-                    
-                    # モーニング番組を検出したら翌日分開始
+                    program_elements = item.find_elements(By.CSS_SELECTOR, "p.bold")
+                    if program_elements:
+                        program_name = program_elements[0].text.strip()
+                   
                     if 'モーニング' in program_name and not found_next_day:
                         found_next_day = True
                         log(f"翌日分開始: {time_str} - {program_name}")
-                    
-                    # 翌日分かつ主要時間帯のみ収集
+                   
                     if found_next_day and time_str in main_times:
-                        # キャスターリンクを探す (href に caster を含むもの)
                         caster_links = item.find_elements(By.CSS_SELECTOR, "a[href*='caster']")
-                        
+                       
                         if caster_links:
                             caster_link = caster_links[0]
                             caster_name = caster_link.text.strip()
                             caster_url = caster_link.get_attribute('href')
-                            
-                            # 有効なキャスター名かチェック
-                            if (caster_name and 
-                                len(caster_name) >= 2 and 
-                                len(caster_name) <= 20 and
-                                re.search(r'[ぁ-んァ-ヶ一-龯]', caster_name)):
-                                
+                           
+                            if (caster_name and len(caster_name) >= 2 and re.search(r'[ぁ-んァ-ヶ一-龯]', caster_name)):
                                 programs.append({
                                     'time': time_str,
                                     'caster': caster_name,
@@ -297,326 +247,111 @@ class WeatherNewsBot:
                                     'program': program_name,
                                     'profile_url': ''
                                 })
-                                log(f"Selenium 抽出(未定): {time_str}")
                         else:
-                            # キャスター情報がない場合
                             programs.append({
                                 'time': time_str,
                                 'caster': '未定',
                                 'program': program_name,
                                 'profile_url': ''
                             })
-                            log(f"Selenium 抽出(未定): {time_str}")
-                
                 except Exception as e:
+                    log(f"アイテム処理エラー: {e}")
                     continue
-            
+           
             driver.quit()
-            
+           
             if programs:
                 log(f"Selenium 成功: {len(programs)}件取得")
                 return programs
             else:
                 log("Selenium: 有効なデータ取得なし")
                 return None
-                
+               
         except Exception as e:
             log(f"Selenium エラー: {e}")
             return None
-    
+
     async def try_pyppeteer_scraping(self):
-        """Pyppeteer でスクレイピングを試行"""
-        try:
-            from pyppeteer import launch
-            
-            log("Pyppeteer でスクレイピング開始...")
-            
-            browser = await launch({
-                'headless': True,
-                'args': [
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--window-size=1920,1080'
-                ]
-            })
-            
-            page = await browser.newPage()
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-            await page.goto(self.url, {'waitUntil': 'domcontentloaded', 'timeout': 60000})
-            await asyncio.sleep(5)
-            
-            # JavaScriptでデータを抽出（順序ベース）
-            schedule_items = await page.evaluate('''() => {
-                const result = [];
-                const items = document.querySelectorAll('.boxStyle__item');
-                const mainTimes = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00'];
-                let foundNextDay = false;
-                
-                items.forEach(item => {
-                    try {
-                        // 時間情報を取得 (最初の p 要素)
-                        const timeElements = item.querySelectorAll('p');
-                        if (!timeElements || timeElements.length === 0) return;
-                        
-                        const timeText = timeElements[0].textContent.trim();
-                        const timeMatch = timeText.match(/(\\d{2}:\\d{2})-/);
-                        if (!timeMatch) return;
-                        
-                        const timeStr = timeMatch[1];
-                        
-                        // 番組名を取得 (p.bold 要素)
-                        let programName = "ウェザーニュースLiVE";
-                        const programElements = item.querySelectorAll('p.bold');
-                        if (programElements.length > 0) {
-                            programName = programElements[0].textContent.trim();
-                        }
-                        
-                        // モーニング番組を検出したら翌日分開始
-                        if (programName.includes('モーニング') && !foundNextDay) {
-                            foundNextDay = true;
-                            console.log('翌日分開始: ' + timeStr + ' - ' + programName);
-                        }
-                        
-                        // 翌日分かつ主要時間帯のみ収集
-                        if (foundNextDay && mainTimes.includes(timeStr)) {
-                            // キャスターリンクを探す (href に "caster" を含む)
-                            const casterLinks = item.querySelectorAll('a[href*="caster"]');
-                            
-                            if (casterLinks.length > 0) {
-                                const casterLink = casterLinks[0];
-                                const casterName = casterLink.textContent.trim();
-                                const casterUrl = casterLink.href;
-                                
-                                // 有効なキャスター名かチェック
-                                if (casterName && 
-                                    casterName.length >= 2 && 
-                                    casterName.length <= 20 &&
-                                    /[ぁ-んァ-ヶ一-龯]/.test(casterName)) {
-                                    
-                                    result.push({
-                                        time: timeStr,
-                                        caster: casterName,
-                                        program: programName,
-                                        profile_url: casterUrl
-                                    });
-                                    
-                                    console.log('翌日分取得: ' + timeStr + ' - ' + casterName);
-                                } else {
-                                    result.push({
-                                        time: timeStr,
-                                        caster: '未定',
-                                        program: programName,
-                                        profile_url: ''
-                                    });
-                                    
-                                    console.log('翌日分取得(未定): ' + timeStr);
-                                }
-                            } else {
-                                // キャスター情報がない場合
-                                result.push({
-                                    time: timeStr,
-                                    caster: '未定',
-                                    program: programName,
-                                    profile_url: ''
-                                });
-                                
-                                console.log('翌日分取得(未定): ' + timeStr);
-                            }
-                        }
-                        
-                    } catch (error) {
-                        console.error('アイテム処理エラー:', error);
-                    }
-                });
-                
-                console.log('取得完了:', result.length + '件');
-                return result;
-            }''')
-            
-            await browser.close()
-            
-            if schedule_items:
-                for item in schedule_items:
-                    log(f"Pyppeteer 抽出: {item['time']} - {item['caster']}")
-                log(f"Pyppeteer 成功: {len(schedule_items)}件取得")
-                return schedule_items
-            else:
-                log("Pyppeteer: 有効なデータ取得なし")
-                return None
-                
-        except Exception as e:
-            log(f"Pyppeteer エラー: {e}")
-            return None
-    
+        """Pyppeteer をスキップ（互換性問題回避）"""
+        log("Pyppeteer: スキップ（websocketsエラー回避）")
+        return None
+
     def get_fallback_schedule(self, partial_data=None):
-        """フォールバック用スケジュール（部分データがあれば活用、不足分は「未定」）"""
+        """フォールバック用スケジュール"""
         log("フォールバック: スケジュール生成")
-        
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
         programs = []
-        
-        # 部分的に取得できたデータがあれば活用
         existing_casters = {}
-        
+       
         if partial_data:
-            log(f"部分データを活用: {len(partial_data)}件")
             for item in partial_data:
                 if item.get('time') in main_times:
                     existing_casters[item['time']] = item.get('caster', '未定')
-        
-        # 各時間帯にキャスターを割り当て
+       
         for time_str in main_times:
-            if time_str in existing_casters:
-                # 実際に取得できたデータを使用
-                caster_name = existing_casters[time_str]
-                log(f"実データ使用: {time_str} - {caster_name}")
-            else:
-                # 取得できなかった場合は「未定」
-                caster_name = '未定'
-                log(f"未定: {time_str}")
-            
+            caster_name = existing_casters.get(time_str, '未定')
             programs.append({
                 'time': time_str,
                 'caster': caster_name,
                 'program': self.get_program_name_by_time(time_str)
             })
-        
         return programs
-    
-    def get_program_info_by_time(self, time_str):
-        """時間帯から番組名とアイコンを取得"""
-        try:
-            hour = int(time_str.split(':')[0])
-            
-            program_info = {
-                5: {
-                    'name': 'モーニング',
-                    'icon': '🌅',
-                    'full_name': 'ウェザーニュースLiVE・モーニング'
-                },
-                8: {
-                    'name': 'サンシャイン',
-                    'icon': '☀️',
-                    'full_name': 'ウェザーニュースLiVE・サンシャイン'
-                },
-                11: {
-                    'name': 'コーヒータイム',
-                    'icon': '☕',
-                    'full_name': 'ウェザーニュースLiVE・コーヒータイム'
-                },
-                14: {
-                    'name': 'アフタヌーン',
-                    'icon': '🌞',
-                    'full_name': 'ウェザーニュースLiVE・アフタヌーン'
-                },
-                17: {
-                    'name': 'イブニング',
-                    'icon': '🌆',
-                    'full_name': 'ウェザーニュースLiVE・イブニング'
-                },
-                20: {
-                    'name': 'ムーン',
-                    'icon': '🌙',
-                    'full_name': 'ウェザーニュースLiVE・ムーン'
-                }
-            }
-            
-            return program_info.get(hour, {
-                'name': 'LiVE',
-                'icon': '📺',
-                'full_name': 'ウェザーニュースLiVE'
-            })
-        except:
-            return {
-                'name': 'LiVE',
-                'icon': '📺',
-                'full_name': 'ウェザーニュースLiVE'
-            }
-    
+
     def get_program_name_by_time(self, time_str):
-        """時間帯から番組名を取得（従来の関数、互換性のため残す）"""
-        program_info = self.get_program_info_by_time(time_str)
-        return program_info['full_name']
-    
+        """時間帯から番組名を取得"""
+        program_info = {
+            '05:00': 'ウェザーニュースLiVE・モーニング',
+            '08:00': 'ウェザーニュースLiVE・サンシャイン',
+            '11:00': 'ウェザーニュースLiVE・コーヒータイム',
+            '14:00': 'ウェザーニュースLiVE・アフタヌーン',
+            '17:00': 'ウェザーニュースLiVE・イブニング',
+            '20:00': 'ウェザーニュースLiVE・ムーン'
+        }
+        return program_info.get(time_str, 'ウェザーニュースLiVE')
+
     def filter_todays_schedule(self, programs):
-        """主要時間帯の番組のみを抽出（重複除去は不要）"""
+        """主要時間帯のみフィルタリング"""
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
-        
-        # 主要時間帯のみフィルタリング
-        filtered_programs = []
-        for program in programs:
-            time_key = program['time']
-            if time_key in main_times:
-                filtered_programs.append(program)
-        
-        return filtered_programs
+        return [p for p in programs if p['time'] in main_times]
+
+    def has_valid_caster(self, programs):
+        """実在のキャスター名があるか判定（未定以外）"""
+        return any(
+            p['caster'] != '未定' and 
+            len(p['caster']) >= 2 and 
+            re.search(r'[ぁ-んァ-ヶ一-龯]', p['caster'])
+            for p in programs
+        )
 
     async def scrape_schedule(self):
-        """スケジュール取得（複数手法を順次試行）"""
+        """スケジュール取得（優先順位: Playwright → Selenium → フォールバック）"""
         log("=== ウェザーニュース番組表取得開始 ===")
-        
-        all_attempts_data = []  # 全ての試行で得られたデータを保存
-        
-        # 1. Playwright を試行
-        programs = self.try_playwright_scraping()
+       
+        # 1. Playwright Async
+        programs = await self.try_playwright_scraping()
         if programs:
-            all_attempts_data.extend(programs)
-            # 重複除去と今日の番組のみフィルタリング
-            filtered_programs = self.filter_todays_schedule(programs)
-            if len(filtered_programs) >= 3:  # 十分なデータが取得できた場合
+            filtered = self.filter_todays_schedule(programs)
+            if len(filtered) >= 3:
                 self.schedule_data = {
-                    'programs': sorted(filtered_programs, key=lambda x: x['time']),
+                    'programs': sorted(filtered, key=lambda x: x['time']),
                     'source': 'playwright',
                     'timestamp': datetime.now(JST).isoformat()
                 }
                 return self.schedule_data
-        
-        # 2. Selenium を試行
+       
+        # 2. Selenium Stealth
         programs = self.try_selenium_scraping()
         if programs:
-            all_attempts_data.extend(programs)
-            filtered_programs = self.filter_todays_schedule(programs)
-            if len(filtered_programs) >= 3:  # 十分なデータが取得できた場合
+            filtered = self.filter_todays_schedule(programs)
+            if len(filtered) >= 3:
                 self.schedule_data = {
-                    'programs': sorted(filtered_programs, key=lambda x: x['time']),
+                    'programs': sorted(filtered, key=lambda x: x['time']),
                     'source': 'selenium',
                     'timestamp': datetime.now(JST).isoformat()
                 }
                 return self.schedule_data
-        
-        # 3. Pyppeteer を試行
-        programs = await self.try_pyppeteer_scraping()
-        if programs:
-            all_attempts_data.extend(programs)
-            filtered_programs = self.filter_todays_schedule(programs)
-            if len(filtered_programs) >= 3:  # 十分なデータが取得できた場合
-                self.schedule_data = {
-                    'programs': sorted(filtered_programs, key=lambda x: x['time']),
-                    'source': 'pyppeteer',
-                    'timestamp': datetime.now(JST).isoformat()
-                }
-                return self.schedule_data
-        
-        # 4. 部分データの統合を試行
-        if all_attempts_data:
-            log(f"部分データ統合: 全{len(all_attempts_data)}件から最適化")
-            
-            # 重複除去と今日の番組のみフィルタリング
-            filtered_data = self.filter_todays_schedule(all_attempts_data)
-            
-            if len(filtered_data) >= 2:  # 最低2件あれば使用
-                # 不足分をフォールバックで補完
-                programs = self.get_fallback_schedule(filtered_data)
-                self.schedule_data = {
-                    'programs': programs,
-                    'source': 'consolidated_partial',
-                    'timestamp': datetime.now(JST).isoformat()
-                }
-                log(f"部分データ統合完了: {len(filtered_data)}件の実データ + フォールバック")
-                return self.schedule_data
-        
-        # 5. 完全フォールバック
+       
+        # 3. 完全フォールバック
         programs = self.get_fallback_schedule()
         self.schedule_data = {
             'programs': programs,
@@ -625,126 +360,95 @@ class WeatherNewsBot:
         }
         log("完全フォールバックスケジュールを使用")
         return self.schedule_data
-    
+
     def format_tweet_text(self):
-        """ツイート文を生成（環境変数制御対応版）"""
+        """ツイート文生成"""
         if not self.schedule_data:
             return None
-        
-        # 対象日を取得（環境変数制御）
+       
         target_date, target_date_str = self.get_target_date_with_env_control()
-        
-        tweet_text = f"📺 {target_date_str} WNL番組表\n\n"
-        
+        tweet_text = f"TV {target_date_str} WNL番組表\n\n"
+       
         programs = self.schedule_data['programs']
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
-        
-        # 時間帯別にキャスターを整理
-        caster_by_time = {}
-        for program in programs:
-            time_key = program['time']
-            if time_key in main_times:
-                caster_by_time[time_key] = program['caster']
-        
-        # ツイート本文を構築（シンプル形式）
-        program_lines = []
+        caster_by_time = {p['time']: p['caster'] for p in programs if p['time'] in main_times}
+       
         for time_str in main_times:
-            if time_str in caster_by_time:
-                caster = caster_by_time[time_str]
-                # スペースを除去してよりコンパクトに
-                caster_clean = caster.replace(' ', '')
-                program_lines.append(f"{time_str}- {caster_clean}")
-            else:
-                program_lines.append(f"{time_str}- 未定")
-        
-        tweet_text += "\n".join(program_lines)
-        tweet_text += "\n\n#ウェザーニュース #番組表"
-        
-        # 文字数制限チェック（280文字）
+            caster = caster_by_time.get(time_str, '未定').replace(' ', '')
+            tweet_text += f"{time_str}- {caster}\n"
+       
+        tweet_text += "\n#ウェザーニュース #番組表"
+       
         if len(tweet_text) > 280:
-            log(f"ツイート文が長すぎます({len(tweet_text)}文字)。短縮します。")
-            # 基本情報のみに短縮
-            tweet_text = f"📺 {target_date_str} WNL番組表\n\n"
-            
-            # 最初の4つの時間帯のみ表示して文字数を抑える
+            tweet_text = f"TV {target_date_str} WNL番組表\n\n"
             for time_str in main_times[:4]:
-                if time_str in caster_by_time:
-                    caster = caster_by_time[time_str].replace(' ', '')
-                    tweet_text += f"{time_str}- {caster}\n"
-                else:
-                    tweet_text += f"{time_str}- 未定\n"
-            
-            tweet_text += "※他の時間帯は番組表をご確認ください\n\n#ウェザーニュース #番組表"
-        
+                caster = caster_by_time.get(time_str, '未定').replace(' ', '')
+                tweet_text += f"{time_str}- {caster}\n"
+            tweet_text += "※他は番組表参照\n\n#ウェザーニュース #番組表"
+       
         return tweet_text
-    
+
     def post_to_twitter(self, tweet_text):
-        """Twitterに投稿"""
+        """Twitter投稿"""
         try:
             import tweepy
-            
-            # Twitter API認証情報を環境変数から取得
-            api_key = os.getenv('TWITTER_API_KEY')
-            api_secret = os.getenv('TWITTER_API_SECRET')
-            access_token = os.getenv('TWITTER_ACCESS_TOKEN')
-            access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-            
-            if not all([api_key, api_secret, access_token, access_token_secret]):
-                log("Twitter API認証情報が不完全です")
-                return False
-            
-            # Twitter APIクライアント初期化
             client = tweepy.Client(
-                consumer_key=api_key,
-                consumer_secret=api_secret,
-                access_token=access_token,
-                access_token_secret=access_token_secret,
+                consumer_key=os.getenv('TWITTER_API_KEY'),
+                consumer_secret=os.getenv('TWITTER_API_SECRET'),
+                access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+                access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
                 wait_on_rate_limit=True
             )
-            
-            # ツイート投稿
             response = client.create_tweet(text=tweet_text)
-            
             if response.data:
-                tweet_id = response.data['id']
-                log(f"ツイート投稿成功: https://twitter.com/i/web/status/{tweet_id}")
+                log(f"ツイート投稿成功: https://twitter.com/i/web/status/{response.data['id']}")
                 return True
-            else:
-                log("ツイート投稿に失敗しました")
-                return False
-        
         except Exception as e:
             log(f"ツイート投稿エラー: {e}")
-            return False
-    
+        return False
+
     async def run(self):
         """メイン実行"""
         try:
-            # スケジュール取得
             schedule_data = await self.scrape_schedule()
-            
+           
             log("=== 取得されたデータ ===")
             for program in schedule_data['programs']:
-                log(f"  {program['time']} - {program['caster']}")
+                log(f" {program['time']} - {program['caster']}")
             log(f"データソース: {schedule_data['source']}")
             log("========================")
-            
-            # ツイート文を生成
+           
             tweet_text = self.format_tweet_text()
-            
             if not tweet_text:
                 log("ツイート文の生成に失敗しました")
                 return False
-            
+
+            # 全キャスター未定ならスキップ
+            if not self.has_valid_caster(schedule_data['programs']):
+                log("全キャスターが未定のため、ツイートをスキップします")
+                target_date, target_date_str = self.get_target_date_with_env_control()
+                result = {
+                    'success': False,
+                    'schedule_data': schedule_data,
+                    'tweet_text': tweet_text,
+                    'timestamp': datetime.now(JST).isoformat(),
+                    'execution_date_jst': datetime.now(JST).strftime('%Y年%m月%d日'),
+                    'target_date_jst': target_date_str,
+                    'skip_reason': 'all_casters_undetermined',
+                    'target_mode': os.getenv('SCHEDULE_TARGET_MODE', 'auto'),
+                    'threshold_hour': os.getenv('SCHEDULE_THRESHOLD_HOUR', '18')
+                }
+                with open('bot_result.json', 'w', encoding='utf-8') as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                return False
+
             log("=== 生成されたツイート文 ===")
             log(tweet_text)
             log(f"文字数: {len(tweet_text)}")
             log("===========================")
-            
-            # Twitterに投稿
+           
             success = self.post_to_twitter(tweet_text)
-            
-            # 結果を保存
+           
             target_date, target_date_str = self.get_target_date_with_env_control()
             result = {
                 'success': success,
@@ -756,33 +460,23 @@ class WeatherNewsBot:
                 'target_mode': os.getenv('SCHEDULE_TARGET_MODE', 'auto'),
                 'threshold_hour': os.getenv('SCHEDULE_THRESHOLD_HOUR', '18')
             }
-            
             with open('bot_result.json', 'w', encoding='utf-8') as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
-            
+           
             log(f"=== 実行完了 ===")
             log(f"対象日: {target_date_str}")
             log(f"ツイート投稿: {'成功' if success else '失敗'}")
-            
             return success
-            
+           
         except Exception as e:
             log(f"実行エラー: {e}")
             return False
 
 async def main():
-    """メイン実行"""
-    log("=== ウェザーニュースボット開始 ===")
-    
+    log("=== ウェザーニュースボット開始（安定版）===")
     bot = WeatherNewsBot()
     success = await bot.run()
-    
-    if success:
-        log("処理完了: 成功")
-        sys.exit(0)
-    else:
-        log("処理完了: 失敗")
-        sys.exit(1)
+    sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
     asyncio.run(main())
