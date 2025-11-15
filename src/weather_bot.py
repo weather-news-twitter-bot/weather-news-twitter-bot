@@ -367,8 +367,8 @@ class WeatherNewsBot:
             return None
        
         target_date, target_date_str = self.get_target_date_with_env_control()
-        tweet_text = f"TV {target_date_str} WNL番組表\n\n"
-       
+        tweet_text = f"📺 {target_date_str} WNL番組表\n\n"
+
         programs = self.schedule_data['programs']
         main_times = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
         caster_by_time = {p['time']: p['caster'] for p in programs if p['time'] in main_times}
