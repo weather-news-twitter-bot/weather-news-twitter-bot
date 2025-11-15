@@ -1,12 +1,15 @@
-# ウェザーニュースボット用依存関係（通常版）
+# === ウェザーニュースボット用依存関係（2025安定版）===
 
 # Twitter API
 tweepy>=4.14.0
 
-# ブラウザ自動化（複数手法対応）
+# ブラウザ自動化（推奨: Playwright Async + Selenium Stealth）
 playwright>=1.40.0
-selenium>=4.15.0
-pyppeteer>=1.0.2
+undetected-chromedriver>=3.5.0
 
-# WebDriver管理（Selenium用）
-webdriver-manager>=4.0.0
+# WebDriver管理（undetected-chromedriverが内部で使用）
+# webdriver-manager>=4.0.0  ← 不要（undetected-chromedriverが代替）
+
+# === オプション（デバッグ用）===
+# selenium>=4.15.0  ← 使わない（undetected-chromedriverが上位互換）
+# pyppeteer>=1.0.2  ← 廃止推奨（websocketsエラー頻発）
