@@ -5,7 +5,7 @@ name: Weather News Bot
 on:
   schedule:
     # 18:00に翌日の番組表を投稿
-    - cron: '0 10 * * *'  # UTC 9:00 = JST 18:00
+    - cron: '0 9 * * *'  # UTC 9:00 = JST 18:00 (元の10:00だとJST 19:00になるので9:00が一般的ですが、意図通りなら変更不要)
   
   # 手動実行も可能にする
   workflow_dispatch:
@@ -32,6 +32,8 @@ on:
 jobs:
   post_schedule:
     runs-on: ubuntu-latest
+    # ブラウザ操作のためタイムアウトを設定（念のため）
+    timeout-minutes: 20
     
     steps:
     - name: Checkout
@@ -41,12 +43,15 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
+        cache: 'pip' # キャッシュを有効化して高速化
     
-
     - name: Install dependencies
       run: |
-        pip install playwright selenium pyppeteer tweepy webdriver-manager
+        python -m pip install --upgrade pip
+        # requirements.txt を使用（undetected-chromedriver等はここに記載）
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install playwright selenium undetected-chromedriver tweepy; fi
         playwright install chromium
+        playwright install-deps # 念のため依存関係もインストール
     
     - name: Run Weather News Bot
       env:
@@ -54,7 +59,9 @@ jobs:
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'tomorrow' }}
+        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'auto' }} # 手動以外はauto
         SCHEDULE_TARGET_DATE: ${{ github.event.inputs.target_date }}
         SCHEDULE_THRESHOLD_HOUR: ${{ github.event.inputs.threshold_hour || '18' }}
+        # タイムゾーン指定
+        TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
