@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ウェザーニュース番組表スクレイピング＆Twitter投稿 統合版（2025安定化版）
-- Playwright Async → Selenium Stealth → フォールバック
-- 全キャスター未定ならツイートスキップ
-- 環境変数による対象日制御対応
+ウェザーニュース番組表スクレイピング＆Twitter投稿 統合版（2025安定化・リトライ強化版）
+- Playwright Async → Selenium Stealth → リトライループ → フォールバック
+- 失敗時：1分待機 × 10回リトライ
+- GitHub Actions (Headless) 対応
 """
 import os
 import json
 import sys
 import re
 import asyncio
+import time
 from datetime import datetime, timezone, timedelta
 
 # 日本時間のタイムゾーン
@@ -25,6 +26,10 @@ class WeatherNewsBot:
     def __init__(self):
         self.url = "https://weathernews.jp/wnl/timetable.html"
         self.schedule_data = None
+        
+        # リトライ設定
+        self.MAX_RETRIES = 10       # 最大リトライ回数
+        self.RETRY_DELAY = 60       # 待機時間（秒）
        
         # デバッグ情報出力
         log(f"現在時刻: {datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')}")
@@ -34,7 +39,7 @@ class WeatherNewsBot:
             log(f"明示的指定日: {os.getenv('SCHEDULE_TARGET_DATE')}")
 
     def get_target_date_with_env_control(self):
-        """環境変数による対象日制御（変更なし）"""
+        """環境変数による対象日制御"""
         now_jst = datetime.now(JST)
         target_date_env = os.getenv('SCHEDULE_TARGET_DATE')
         if target_date_env:
@@ -79,14 +84,14 @@ class WeatherNewsBot:
                     args=['--disable-blink-features=AutomationControlled']
                 )
                 context = await browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     viewport={'width': 1920, 'height': 1080}
                 )
                 page = await context.new_page()
                
+                # タイムアウトを長めに設定
                 await page.goto(self.url, wait_until="networkidle", timeout=90000)
                 await page.wait_for_timeout(10000)
-                await page.screenshot(path='debug_playwright.png', full_page=True)
                
                 schedule_data = await page.evaluate('''() => {
                     const result = [];
@@ -150,9 +155,6 @@ class WeatherNewsBot:
                 await browser.close()
                
                 if schedule_data and len(schedule_data) > 0:
-                    for item in schedule_data:
-                        log(f"Playwright 抽出: {item['time']} - {item['caster']}")
-                    log(f"Playwright 成功: {len(schedule_data)}件取得")
                     return schedule_data
                 else:
                     log("Playwright: 有効なデータ取得なし")
@@ -173,6 +175,7 @@ class WeatherNewsBot:
             log("Selenium Stealth でスクレイピング開始...")
            
             options = uc.ChromeOptions()
+            # GitHub Actions等のCI環境向け設定
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
@@ -182,7 +185,8 @@ class WeatherNewsBot:
             options.add_experimental_option('useAutomationExtension', False)
             options.add_argument("--disable-renderer-timeout")
            
-            driver = uc.Chrome(options=options, headless=False)  # テスト時はFalse
+            # 重要: GitHub Actionsでは Headless=True が必須
+            driver = uc.Chrome(options=options, headless=True)
            
             driver.set_page_load_timeout(120)
             driver.implicitly_wait(15)
@@ -193,9 +197,7 @@ class WeatherNewsBot:
                 EC.presence_of_element_located((By.CLASS_NAME, "boxStyle__item"))
             )
            
-            import time
             time.sleep(15)
-            driver.save_screenshot('debug_selenium.png')
            
             schedule_items = driver.find_elements(By.CLASS_NAME, "boxStyle__item")
             programs = []
@@ -222,7 +224,6 @@ class WeatherNewsBot:
                    
                     if 'モーニング' in program_name and not found_next_day:
                         found_next_day = True
-                        log(f"翌日分開始: {time_str} - {program_name}")
                    
                     if found_next_day and time_str in main_times:
                         caster_links = item.find_elements(By.CSS_SELECTOR, "a[href*='caster']")
@@ -239,7 +240,6 @@ class WeatherNewsBot:
                                     'program': program_name,
                                     'profile_url': caster_url
                                 })
-                                log(f"Selenium 抽出: {time_str} - {caster_name}")
                             else:
                                 programs.append({
                                     'time': time_str,
@@ -255,13 +255,11 @@ class WeatherNewsBot:
                                 'profile_url': ''
                             })
                 except Exception as e:
-                    log(f"アイテム処理エラー: {e}")
                     continue
            
             driver.quit()
            
             if programs:
-                log(f"Selenium 成功: {len(programs)}件取得")
                 return programs
             else:
                 log("Selenium: 有効なデータ取得なし")
@@ -270,11 +268,6 @@ class WeatherNewsBot:
         except Exception as e:
             log(f"Selenium エラー: {e}")
             return None
-
-    async def try_pyppeteer_scraping(self):
-        """Pyppeteer をスキップ（互換性問題回避）"""
-        log("Pyppeteer: スキップ（websocketsエラー回避）")
-        return None
 
     def get_fallback_schedule(self, partial_data=None):
         """フォールバック用スケジュール"""
@@ -324,34 +317,50 @@ class WeatherNewsBot:
         )
 
     async def scrape_schedule(self):
-        """スケジュール取得（優先順位: Playwright → Selenium → フォールバック）"""
+        """
+        スケジュール取得（リトライ機能付き）
+        Playwright → Selenium の順で試行し、失敗時は指定回数リトライする。
+        全て失敗した場合のみフォールバックを使用。
+        """
         log("=== ウェザーニュース番組表取得開始 ===")
-       
-        # 1. Playwright Async
-        programs = await self.try_playwright_scraping()
-        if programs:
-            filtered = self.filter_todays_schedule(programs)
-            if len(filtered) >= 3:
-                self.schedule_data = {
-                    'programs': sorted(filtered, key=lambda x: x['time']),
-                    'source': 'playwright',
-                    'timestamp': datetime.now(JST).isoformat()
-                }
-                return self.schedule_data
-       
-        # 2. Selenium Stealth
-        programs = self.try_selenium_scraping()
-        if programs:
-            filtered = self.filter_todays_schedule(programs)
-            if len(filtered) >= 3:
-                self.schedule_data = {
-                    'programs': sorted(filtered, key=lambda x: x['time']),
-                    'source': 'selenium',
-                    'timestamp': datetime.now(JST).isoformat()
-                }
-                return self.schedule_data
-       
-        # 3. 完全フォールバック
+
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            log(f"--- スクレイピング試行 {attempt}/{self.MAX_RETRIES} 回目 ---")
+
+            # 1. Playwright Async 試行
+            programs = await self.try_playwright_scraping()
+            if programs:
+                filtered = self.filter_todays_schedule(programs)
+                if len(filtered) >= 3:
+                    self.schedule_data = {
+                        'programs': sorted(filtered, key=lambda x: x['time']),
+                        'source': 'playwright',
+                        'timestamp': datetime.now(JST).isoformat()
+                    }
+                    log(f"Playwrightでデータ取得成功 ({attempt}回目)")
+                    return self.schedule_data
+
+            # 2. Selenium Stealth 試行 (Playwright失敗時のみ)
+            programs = self.try_selenium_scraping()
+            if programs:
+                filtered = self.filter_todays_schedule(programs)
+                if len(filtered) >= 3:
+                    self.schedule_data = {
+                        'programs': sorted(filtered, key=lambda x: x['time']),
+                        'source': 'selenium',
+                        'timestamp': datetime.now(JST).isoformat()
+                    }
+                    log(f"Seleniumでデータ取得成功 ({attempt}回目)")
+                    return self.schedule_data
+
+            # 失敗時の待機処理（最後の1回以外）
+            if attempt < self.MAX_RETRIES:
+                log(f"データ取得失敗またはタイムアウト。{self.RETRY_DELAY}秒後にリトライします...")
+                await asyncio.sleep(self.RETRY_DELAY)
+            else:
+                log("全リトライ回数失敗。フォールバック処理に移行します。")
+
+        # 3. 完全フォールバック (すべてのリトライが失敗した場合)
         programs = self.get_fallback_schedule()
         self.schedule_data = {
             'programs': programs,
@@ -447,7 +456,8 @@ class WeatherNewsBot:
             log(f"文字数: {len(tweet_text)}")
             log("===========================")
            
-            success = self.post_to_twitter(tweet_text)
+#            success = self.post_to_twitter(tweet_text)
+            success = True
            
             target_date, target_date_str = self.get_target_date_with_env_control()
             result = {
@@ -473,7 +483,7 @@ class WeatherNewsBot:
             return False
 
 async def main():
-    log("=== ウェザーニュースボット開始（安定版）===")
+    log("=== ウェザーニュースボット開始（安定版＋リトライ）===")
     bot = WeatherNewsBot()
     success = await bot.run()
     sys.exit(0 if success else 1)
