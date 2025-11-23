@@ -456,8 +456,7 @@ class WeatherNewsBot:
             log(f"文字数: {len(tweet_text)}")
             log("===========================")
            
-#            success = self.post_to_twitter(tweet_text)
-            success = True
+            success = self.post_to_twitter(tweet_text)
            
             target_date, target_date_str = self.get_target_date_with_env_control()
             result = {
