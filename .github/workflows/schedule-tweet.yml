@@ -5,13 +5,22 @@ on:
     # 毎日 JST 18:00 (UTC 09:00) に実行
     - cron: '0 9 * * *'
   workflow_dispatch: # 手動実行を許可
+    inputs:
+      mode: # ★ 復活させた入力
+        description: '対象日の決定モード (auto: 18時以降は翌日)'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+        - auto
+        - today
+        - tomorrow
 
 jobs:
   post_schedule:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
-    # 🚨 必須: リポジトリへのプッシュ権限
     permissions:
       contents: write
       
@@ -19,7 +28,6 @@ jobs:
     - name: Checkout repository (with full history)
       uses: actions/checkout@v4
       with:
-        # 履歴全体を取得しないと、コミットが失敗することがあるため
         fetch-depth: 0
 
     # -------------------------------------------------------------
@@ -47,18 +55,18 @@ jobs:
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
         # Bot Settings
-        EXECUTION_MODE: 'post' # 初回投稿モードで実行
+        EXECUTION_MODE: 'post'
+        # ★ 修正箇所: 手動入力 'mode' を環境変数に渡す
+        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.mode }}
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
       
     # -------------------------------------------------------------
-    # 3. 状態ファイルのコミットとプッシュ (Artifactsの代替)
+    # 3. 状態ファイルのコミットとプッシュ 
     # -------------------------------------------------------------
     - name: 💾 Commit and Push Schedule Data to Repo
-      # Pythonスクリプトが成功した場合のみ実行
       if: success()
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "BOT: Initial post schedule data commit"
-        # files -> file_pattern に修正
         file_pattern: schedule_data.json
