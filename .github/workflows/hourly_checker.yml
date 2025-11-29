@@ -21,13 +21,13 @@ jobs:
 
     # -------------------------------------------------------------
     # 1. GitHub CLI を使用して初回投稿ワークフローの実行IDを見つける
+    #    -> 検索対象を 'schedule-tweet.yml' に修正
     # -------------------------------------------------------------
     - name: 🔎 Find Initial Post Workflow Run ID using gh cli
       id: find_run
       run: |
-        # 初回投稿ワークフロー（weather_news_bot.yml）の最新の成功した実行IDを取得
-        # jqを使ってJSONからIDを抽出
-        RUN_ID=$(gh run list --workflow=weather_news_bot.yml --status=success --limit 1 --json databaseId | jq -r '.[0].databaseId')
+        # 初回投稿ワークフローのファイル名（schedule-tweet.yml）で検索
+        RUN_ID=$(gh run list --workflow=schedule-tweet.yml --status=success --limit 1 --json databaseId | jq -r '.[0].databaseId')
         
         if [ "$RUN_ID" != "null" ] && [ -n "$RUN_ID" ]; then
           echo "Found Run ID: $RUN_ID"
@@ -37,7 +37,7 @@ jobs:
           echo "runId=" >> $GITHUB_OUTPUT
         fi
       env:
-        # gh CLI認証のためにGITHUB_TOKENを使用（自動提供される）
+        # gh CLI認証のためにGITHUB_TOKENを使用
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # -------------------------------------------------------------
