@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 
 # 日本時間のタイムゾーン設定
 JST = timezone(timedelta(hours=9))
-# ★ 修正: 23:00枠を除外し、キャスターが存在する6つのメイン枠のみを対象とする
+# 修正: 23:00枠を除外し、キャスターが存在する6つのメイン枠のみを対象とする
 MAIN_TIMES = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00'] 
 EXPECTED_FRAME_COUNT = len(MAIN_TIMES) # 期待される枠数は6
 
@@ -283,25 +283,24 @@ class WeatherNewsBot:
 
     def clean_schedule_data(self, programs, target_date):
         """
-        早朝実行時の23:00枠破棄と、データセットの末尾に混入した翌日の05:00枠を破棄する。
+        早朝実行時の23:00枠破棄と、取得枠が多すぎる場合の強制調整を行う。
         """
         now_jst = datetime.now(JST)
         
         # --- (A) 早朝の23:00破棄ロジック (00:00-04:59) ---
-        # ターゲット日が「今日」かつ現在時刻が早朝帯（00:00から04:59）の場合に適用
-        # 23:00枠はMAIN_TIMESから除外したが、サイトが返すデータに含まれている可能性があるため、防御的にチェック
         is_early_morning_target_today = (target_date.date() == now_jst.date()) and (0 <= now_jst.hour < 5)
 
         if is_early_morning_target_today and programs and programs[0]['time'] == '23:00':
             log(f"早朝実行のため、先頭に残った前日分の23:00枠 ({programs[0]['caster'] if 'caster' in programs[0] else '不明'}) を破棄しました。")
             programs = programs[1:]
         
-        # --- (B) データ末尾の翌日05:00破棄ロジック ---
-        # 取得枠がEXPECTED_FRAME_COUNT (6枠)を超えている場合、リスト末尾の翌日05:00を削除する
-        if len(programs) > EXPECTED_FRAME_COUNT and programs[-1]['time'] == '05:00':
-            caster_info = programs[-1]['caster'] if 'caster' in programs[-1] else '不明'
-            log(f"✅ クリーンアップ成功: 取得枠が {EXPECTED_FRAME_COUNT} 枠超のため、末尾の翌日05:00枠 ({caster_info}) を破棄しました。最終枠数: {len(programs) - 1}")
-            programs = programs[:-1]
+        # --- (B) 取得枠の強制調整ロジック ★ 最重要修正 ★ ---
+        # 取得枠が EXPECTED_FRAME_COUNT (6枠)を超えている場合、
+        # リストの先頭から EXPECTED_FRAME_COUNT 分だけを採用し、超過分を強制的に破棄する。
+        if len(programs) > EXPECTED_FRAME_COUNT:
+            log(f"🚨 強制調整: 取得枠が {EXPECTED_FRAME_COUNT} 枠を超えています ({len(programs)} 枠)。末尾の {len(programs) - EXPECTED_FRAME_COUNT} 枠を破棄します。")
+            programs = programs[:EXPECTED_FRAME_COUNT] # 先頭から6枠だけを採用
+            log(f"✅ 強制調整完了。最終枠数: {len(programs)}")
             
         return programs
 
@@ -332,15 +331,13 @@ class WeatherNewsBot:
             
             target_date, target_date_str = self.get_target_date_with_env_control()
 
-            # ★ 修正：データセットを確定する前に、クリーンアップを実行
-            # クリーンアップにより、Day 1やDay 2のデータ数が変化しても、後の補完ロジックで対応可能
+            # データセットを確定する前に、クリーンアップを実行
             data_set_1 = self.clean_schedule_data(data_set_1, target_date)
             data_set_2 = self.clean_schedule_data(data_set_2, target_date)
             
             # ターゲット日を基準にデータセットを選択
             is_tomorrow_target = (target_date.date() - datetime.now(JST).date()).days >= 1
             
-            # サイトの並び順が [今日残りの枠, 明日の枠] の順であることを前提とする
             if is_tomorrow_target:
                 final_programs = data_set_2
                 log(f"ターゲット日({target_date_str})が翌日のため、2番目のデータセットを選択。")
@@ -348,12 +345,10 @@ class WeatherNewsBot:
                 final_programs = data_set_1
                 log(f"ターゲット日({target_date_str})が本日のため、1番目のデータセットを選択。")
 
-            # ★ 修正: 選択したデータが空で、もう一方にデータがある場合は、そちらをフォールバックとして使用
-            # Day 1 (本日) が空で、Day 2 (翌日) にデータがある場合 (日付の変わり目に発生しやすいパターン)
+            # 補完ロジック (空だった場合のフォールバック)
             if not final_programs and not is_tomorrow_target and data_set_2:
                 final_programs = data_set_2
                 log("補足: Day 1が空のため、Day 2のデータを使用しました。")
-            # Day 2 (翌日) が空で、Day 1 (本日) にデータがある場合
             elif not final_programs and is_tomorrow_target and data_set_1:
                 final_programs = data_set_1
                 log("補足: Day 2が空のため、Day 1のデータを使用しました。")
@@ -364,7 +359,6 @@ class WeatherNewsBot:
                  final_programs = self.get_fallback_schedule()
 
             return {
-                # サイトの時系列順が正しいので、そのまま返す (Twitter投稿時もソートは不要)
                 'programs': final_programs,
                 'source': 'web_scrape',
                 'timestamp': datetime.now(JST).isoformat()
@@ -418,7 +412,6 @@ class WeatherNewsBot:
                 return True
         except Exception as e:
             log(f"ツイート投稿エラー: {e}")
-            # Tweepyのインポートエラーもここで捕捉される
         return False
 
     def has_valid_caster(self, programs):
@@ -468,7 +461,6 @@ class WeatherNewsBot:
     def format_update_tweet(self, previous_progs, current_progs, target_date_str):
         """
         キャスター変更を検出した際の更新通知ツイートを生成する
-        フォーマット: 05:00- キャスターB (キャスターAから変更:09:20)
         """
         # 過去データと現在データを時間で辞書化し、比較しやすくする
         prev_map = {p['time']: p['caster'] for p in previous_progs}
@@ -532,10 +524,10 @@ class WeatherNewsBot:
         self.schedule_data = schedule_data
         schedule_data['target_date_jst'] = target_date_str
         
-        log("=== 取得されたデータ ===")
+        log("=== 取得されたデータ（クリーンアップ後） ===")
         for program in schedule_data['programs']:
             log(f" {program['time']} - {program['caster']}")
-        log("========================")
+        log("=====================================")
 
         if not self.has_valid_caster(schedule_data['programs']):
             log("有効なキャスター情報がないため、ツイートをスキップします")
