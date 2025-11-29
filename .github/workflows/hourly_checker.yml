@@ -16,20 +16,21 @@ jobs:
       uses: actions/checkout@v4
 
     # -------------------------------------------------------------
-    # ★ 修正 1: 初回投稿ワークフローの実行IDを見つける
+    # 1. Artifactの実行IDを見つける (他のワークフローの成功実行を特定)
     # -------------------------------------------------------------
     - name: 🔎 Find Initial Post Workflow Run ID
       id: find_run
+      # 他ワークフローのArtifactを参照するために必須
       uses: "xt0rted/actions-find-artifact@v2"
       with:
-        # 初回投稿ワークフローのYAMLファイル名を指定
+        # 初回投稿ワークフローのYAMLファイル名
         workflow: weather_news_bot.yml
         artifactName: latest-schedule-data
         branch: ${{ github.ref_name }} 
-        status: success # 成功した実行のみを対象とする
+        status: success
 
     # -------------------------------------------------------------
-    # ★ 修正 2: Artifactをダウンロード（実行IDを指定し、失敗を許容）
+    # 2. Artifactをダウンロード（実行IDを指定し、失敗を許容）
     # -------------------------------------------------------------
     - name: 📦 Download Previous Schedule Artifact
       id: download_artifact_step
@@ -38,17 +39,17 @@ jobs:
       if: steps.find_run.outputs.runId != '' 
       with:
         name: latest-schedule-data
-        path: .
+        path: . # カレントディレクトリに schedule_data.json が配置される (zipが自動解凍される)
         run-id: ${{ steps.find_run.outputs.runId }}
-      # ダウンロードに失敗してもジョブを続行させる (Artifact不在時のガード)
+      # Artifactが見つからない場合、このステップは失敗するが、ジョブは続行される
       continue-on-error: true 
 
     # -------------------------------------------------------------
-    # ★ 修正 3: Python実行以降の全ステップに、Artifactダウンロード成功の条件を追加
+    # 3. Pythonの環境構築 (ダウンロード成功時のみ実行)
     # -------------------------------------------------------------
-    # Artifactが存在し、ダウンロードに成功した場合のみ、後続の処理を実行する
     - name: Set up Python
       uses: actions/setup-python@v4
+      # ダウンロードステップが成功した場合のみ実行 (Artifactが存在する/見つかった場合)
       if: steps.download_artifact_step.outcome == 'success'
       with:
         python-version: '3.11'
@@ -60,19 +61,31 @@ jobs:
         playwright install-deps
       if: steps.download_artifact_step.outcome == 'success'
 
+    # -------------------------------------------------------------
+    # 4. 監視ロジックの実行 (ダウンロード成功時のみ実行)
+    # -------------------------------------------------------------
     - name: 🔄 Run Checker Bot
       env:
-        # ... (環境変数設定は省略) ...
-        EXECUTION_MODE: 'check'
+        # Twitter API Keys (GitHub Secrets)
+        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        # Bot Settings
+        EXECUTION_MODE: 'check' # 監視モードで実行
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
       if: steps.download_artifact_step.outcome == 'success'
       
+    # -------------------------------------------------------------
+    # 5. 状態ファイルの再アップロード (ダウンロード成功時のみ実行)
+    # -------------------------------------------------------------
     - name: ⬆️ Re-Upload Updated Schedule Artifact
       uses: actions/upload-artifact@v4
-      if: steps.download_artifact_step.outcome == 'success'
+      # スクリプトが成功した場合 (outcome == 'success') のみアップロードする
+      if: steps.download_artifact_step.outcome == 'success' && success()
       with:
         name: latest-schedule-data
         path: schedule_data.json
-        overwrite: true
+        overwrite: true # 変更後の状態を上書きして再検出を防ぐ
         retention-days: 1
