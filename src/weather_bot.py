@@ -72,7 +72,11 @@ class WeatherNewsBot:
             log("Playwright Async でスクレイピング開始...")
             
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
+                # ★ 修正箇所: CI環境向けの安定化オプション (--no-sandbox, --disable-dev-shm-usage) を追加
+                browser = await p.chromium.launch(
+                    headless=True, 
+                    args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled']
+                )
                 context = await browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', viewport={'width': 1920, 'height': 1080})
                 page = await context.new_page()
                 
@@ -149,6 +153,7 @@ class WeatherNewsBot:
             log("Selenium Stealth でスクレイピング開始...")
             
             options = uc.ChromeOptions()
+            # CI環境向けの安定化オプションは既存コードで既に設定済み
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--window-size=1920,1080")
@@ -237,7 +242,6 @@ class WeatherNewsBot:
             if program['time'] == '05:00':
                 if split_index == -1:
                     # 最初の 05:00 以降を「次の日」のデータとして判断する
-                    # 例：[08:00, 11:00, ..., 05:00, 08:00] の場合、05:00 の手前までが今日。
                     split_index = i
                     break
         
@@ -245,18 +249,9 @@ class WeatherNewsBot:
             today_programs = all_programs[:split_index]
             tomorrow_programs = all_programs[split_index:]
             
-            # ただし、サイトの表示が [05:00(今日), 08:00(今日), ..., 05:00(明日)] の場合もあるため、
-            # データの量を見て、適切な方に振り分ける。
-            # 今回は、上から時系列順という前提を重視し、最初の 05:00 の手前を一旦今日の残りのデータと見なす
-            # 最初の 05:00 の枠自体は、サイトの構造により「今日」または「明日」のどちらかに属する
-            # 安全のため、サイト上から取れたリストをそのまま返し、ターゲット日で選択する。
-            
-            # 今回は、サイトが「上から時系列順」であり、05:00を跨いで表示されている前提で、
-            # リストをそのまま返すことで、Python側で日付判定ロジックをシンプルにする。
-            # [今日残り, 明日分] が繋がっている状態と見なす。
             log(f"番組データが {len(today_programs)} (Day 1) と {len(tomorrow_programs)} (Day 2) に分割されました。")
             return today_programs, tomorrow_programs
-        
+            
         # 05:00が2回出現しない場合（データが1日分しかない場合など）
         return all_programs, []
 
@@ -294,7 +289,6 @@ class WeatherNewsBot:
                 
         if all_programs:
             # 取得したデータを「今日」と「明日」のまとまりに分割
-            # ここで得られるデータはサイトの並び順に準拠している
             data_set_1, data_set_2 = self.split_schedule_by_date(all_programs)
             
             target_date, target_date_str = self.get_target_date_with_env_control()
@@ -486,7 +480,7 @@ class WeatherNewsBot:
         
         log("=== 取得されたデータ ===")
         for program in schedule_data['programs']:
-             log(f" {program['time']} - {program['caster']}")
+            log(f" {program['time']} - {program['caster']}")
         log("========================")
 
         if not self.has_valid_caster(schedule_data['programs']):
