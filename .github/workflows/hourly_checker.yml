@@ -18,26 +18,31 @@ jobs:
 
     steps:
     - name: Checkout repository
-      # ★ 修正: actions/checkout@v4
       uses: actions/checkout@v4
 
     # -------------------------------------------------------------
     # 1. GitHub API (gh api) を使用してArtifactが存在する実行IDを取得
+    #    -> ブランチをフィルタリングして最新の実行IDを確実に取得
     # -------------------------------------------------------------
-    - name: 🔎 Find Run ID by Artifact existence
+    - name: 🔎 Find Run ID by Artifact existence (Final Fix)
       id: find_run
       run: |
-        # Artifactsリストから最新の 'latest-schedule-data' が紐づく実行IDを取得
+        # 現在のブランチ名を取得
+        CURRENT_BRANCH=${{ github.ref_name }}
+        
+        # Artifactsリストから、現在のブランチの最新の Artifact が紐づく実行IDを取得
         ARTIFACT_ID=$(gh api \
           -H "Accept: application/vnd.github.v3+json" \
-          /repos/${{ github.repository }}/actions/artifacts?name=latest-schedule-data | \
-          jq -r '.artifacts[] | select(.name == "latest-schedule-data") | .workflow_run.id' | head -n 1)
+          /repos/${{ github.repository }}/actions/artifacts | \
+          jq -r --arg name "latest-schedule-data" \
+          --arg branch "$CURRENT_BRANCH" \
+          '.artifacts[] | select(.name == $name and .workflow_run.head_branch == $branch) | .workflow_run.id' | head -n 1)
 
         if [ -n "$ARTIFACT_ID" ]; then
-          echo "Found Artifact Run ID: $ARTIFACT_ID"
+          echo "Found Artifact Run ID: $ARTIFACT_ID on branch $CURRENT_BRANCH"
           echo "runId=$ARTIFACT_ID" >> $GITHUB_OUTPUT
         else
-          echo "No active artifact found. Skipping check."
+          echo "No active artifact found on branch $CURRENT_BRANCH. Skipping check."
           echo "runId=" >> $GITHUB_OUTPUT
         fi
       env:
@@ -48,12 +53,12 @@ jobs:
     # -------------------------------------------------------------
     - name: 📦 Download Previous Schedule Artifact
       id: download_artifact_step
-      # ★ 修正: actions/download-artifact@v4
       uses: actions/download-artifact@v4
+      # Findステップで runId が見つかった場合のみ実行
       if: steps.find_run.outputs.runId != '' 
       with:
         name: latest-schedule-data
-        path: .
+        path: . 
         run-id: ${{ steps.find_run.outputs.runId }}
       continue-on-error: true 
 
@@ -61,7 +66,6 @@ jobs:
     # 3. Pythonの環境構築 (ダウンロード成功時のみ実行)
     # -------------------------------------------------------------
     - name: Set up Python
-      # ★ 修正: actions/setup-python@v4
       uses: actions/setup-python@v4
       if: steps.download_artifact_step.outcome == 'success'
       with:
@@ -92,7 +96,6 @@ jobs:
     # 5. 状態ファイルの再アップロード (Python実行成功時のみ実行)
     # -------------------------------------------------------------
     - name: ⬆️ Re-Upload Updated Schedule Artifact
-      # ★ 修正: actions/upload-artifact@v4
       uses: actions/upload-artifact@v4
       if: steps.download_artifact_step.outcome == 'success' && success()
       with:
