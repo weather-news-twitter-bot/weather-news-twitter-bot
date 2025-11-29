@@ -83,10 +83,13 @@ class WeatherNewsBot:
                 # 待機条件を 'domcontentloaded' に緩和し、タイムアウトを120秒に延長
                 await page.goto(self.url, wait_until="domcontentloaded", timeout=120000) 
                 
-                # ★ 修正: 固定の5秒待機を削除し、キャスター要素の出現を最大30秒待つ
+                # ★ 修正: キャスター要素の出現を待つ + データを読み込むための固定待機を追加
                 try:
                     await page.wait_for_selector('a[href*="caster"]', timeout=30000)
                     log("キャスター情報要素の出現を確認しました。")
+                    
+                    # データ注入の遅延に対応するため、さらに5秒待機
+                    await page.wait_for_timeout(5000)
                 except Exception:
                     # 30秒以内に出現しなくても、他のデータは抽出するため処理は続行
                     log("キャスター情報要素は30秒以内に出現しませんでした。抽出処理に進みます。")
@@ -313,7 +316,17 @@ class WeatherNewsBot:
             else:
                 final_programs = data_set_1
                 log(f"ターゲット日({target_date_str})が本日のため、1番目のデータセットを選択。")
-                
+
+            # ★ 修正: 選択したデータが空で、もう一方にデータがある場合は、そちらをフォールバックとして使用
+            # Day 1 (本日) が空で、Day 2 (翌日) にデータがある場合 (日付の変わり目に発生しやすいパターン)
+            if not final_programs and not is_tomorrow_target and data_set_2:
+                final_programs = data_set_2
+                log("補足: Day 1が空のため、Day 2のデータを使用しました。")
+            # Day 2 (翌日) が空で、Day 1 (本日) にデータがある場合
+            elif not final_programs and is_tomorrow_target and data_set_1:
+                final_programs = data_set_1
+                log("補足: Day 2が空のため、Day 1のデータを使用しました。")
+
             # 取得したデータが空だった場合の最終フォールバック
             if not final_programs:
                  log("ターゲット日のデータが空でした。完全フォールバックに移行。")
@@ -450,138 +463,3 @@ class WeatherNewsBot:
                 try:
                     program_dt = datetime.strptime(f"{target_date.strftime('%Y-%m-%d')} {time_str}", '%Y-%m-%d %H:%M').replace(tzinfo=JST)
                     if program_dt < now_jst:
-                        log(f"更新チェック時、放送済み枠をスキップ: {time_str}")
-                        continue
-                except ValueError:
-                    continue
-
-            # 1. 変更判定
-            if curr_caster and prev_caster and curr_caster != prev_caster:
-                # 【変更あり】
-                line = f"{time_str}- {curr_caster} ({prev_caster}から変更:{detect_time})"
-                changes_count += 1
-                log(f"変更検出: {time_str} {prev_caster} -> {curr_caster}")
-            elif curr_caster:
-                # 【変更なし】現在のデータを表示
-                line = f"{time_str}- {curr_caster}"
-            else:
-                # ここに来ることは稀だが、データが取得できなかった場合
-                continue
-                
-            tweet_lines.append(line)
-
-        if changes_count > 0:
-            tweet_text = f"📢 【番組表変更のお知らせ】\n\n📺 {target_date_str} WNL番組表(更新)\n\n"
-            tweet_text += "\n".join(tweet_lines)
-            tweet_text += "\n\n#ウェザーニュース #番組表"
-            return tweet_text
-            
-        return None
-
-    # --- 実行モード ---
-
-    async def run(self):
-        """メイン実行（初回投稿・通常モード）"""
-        target_date, target_date_str = self.get_target_date_with_env_control()
-        schedule_data = await self.scrape_schedule()
-        
-        self.schedule_data = schedule_data
-        schedule_data['target_date_jst'] = target_date_str
-        
-        log("=== 取得されたデータ ===")
-        for program in schedule_data['programs']:
-            log(f" {program['time']} - {program['caster']}")
-        log("========================")
-
-        if not self.has_valid_caster(schedule_data['programs']):
-            log("有効なキャスター情報がないため、ツイートをスキップします")
-            self.save_current_data(schedule_data)
-            return False
-
-        # ツイートスキップフラグのチェック (通常モード)
-        if os.getenv('SKIP_TWEET_FLAG') == 'true':
-            log("SKIP_TWEET_FLAGが'true'のため、ツイート投稿をスキップします。")
-            self.save_current_data(schedule_data)
-            return True # スキップしたので成功とみなす
-
-        tweet_text = self.format_normal_tweet_text()
-        success = self.post_to_twitter(tweet_text)
-        
-        self.save_current_data(schedule_data)
-        
-        log(f"=== 実行完了 (通常) ===")
-        log(f"ツイート投稿: {'成功' if success else '失敗'}")
-        return success
-
-    async def run_check_mode(self):
-        """監視・更新モード"""
-        log("=== 番組表 監視・更新モード開始 ===")
-        
-        previous_data = self.load_previous_data()
-        
-        if not previous_data:
-            log("過去データが存在しません。強制的に通常モードで実行します。")
-            return await self.run()
-
-        current_data = await self.scrape_schedule()
-        if not current_data:
-            log("現在のデータが取得できませんでした。スキップします。")
-            return False
-
-        target_date_str = previous_data.get('target_date_jst', '日付不明')
-        tweet_text = self.format_update_tweet(
-            previous_data['programs'], 
-            current_data['programs'],
-            target_date_str
-        )
-        self.schedule_data = current_data
-
-        if tweet_text:
-            log("変更を検出しました。更新ツイートを投稿します。")
-            
-            # ツイートスキップフラグのチェック (監視モード)
-            if os.getenv('SKIP_TWEET_FLAG') == 'true':
-                log("SKIP_TWEET_FLAGが'true'のため、ツイート投稿をスキップします。状態ファイルは更新します。")
-                current_data['target_date_jst'] = target_date_str
-                self.save_current_data(current_data)
-                return True
-            
-            if self.post_to_twitter(tweet_text):
-                current_data['target_date_jst'] = target_date_str
-                self.save_current_data(current_data)
-                log("状態ファイルを更新しました。")
-                return True
-            else:
-                log("ツイート投稿に失敗したため、状態ファイルは更新しません。再リトライ待ち。")
-                return False
-        else:
-            log("変更は検出されませんでした。")
-            return True
-
-async def main():
-    log("=== ウェザーニュースボット開始 ===")
-    
-    execution_mode = os.getenv('EXECUTION_MODE', 'normal').lower()
-    log(f"実行モード: {execution_mode}")
-    
-    bot = WeatherNewsBot()
-    
-    if execution_mode == 'check':
-        success = await bot.run_check_mode()
-    else:
-        success = await bot.run()
-        
-    if bot.schedule_data:
-        bot_result = {
-            'success': success,
-            'source': bot.schedule_data.get('source'),
-            'timestamp': datetime.now(JST).isoformat(),
-            'target_date_jst': bot.schedule_data.get('target_date_jst')
-        }
-        with open('bot_result.json', 'w', encoding='utf-8') as f:
-            json.dump(bot_result, f, ensure_ascii=False, indent=2)
-
-    sys.exit(0 if success else 1)
-
-if __name__ == "__main__":
-    asyncio.run(main())
