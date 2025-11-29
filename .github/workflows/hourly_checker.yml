@@ -15,15 +15,41 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # -------------------------------------------------------------
+    # ★ 修正 1: 初回投稿ワークフローの実行IDを見つける
+    # -------------------------------------------------------------
+    - name: 🔎 Find Initial Post Workflow Run ID
+      id: find_run
+      uses: "xt0rted/actions-find-artifact@v2"
+      with:
+        # 初回投稿ワークフローのYAMLファイル名を指定
+        workflow: weather_news_bot.yml
+        artifactName: latest-schedule-data
+        branch: ${{ github.ref_name }} 
+        status: success # 成功した実行のみを対象とする
+
+    # -------------------------------------------------------------
+    # ★ 修正 2: Artifactをダウンロード（実行IDを指定し、失敗を許容）
+    # -------------------------------------------------------------
     - name: 📦 Download Previous Schedule Artifact
-      # 初回投稿ワークフローで保存したファイルをダウンロード
+      id: download_artifact_step
       uses: actions/download-artifact@v4
+      # Findステップで runId が見つかった場合のみ実行
+      if: steps.find_run.outputs.runId != '' 
       with:
         name: latest-schedule-data
-        path: . # カレントディレクトリに schedule_data.json が配置される
-        
+        path: .
+        run-id: ${{ steps.find_run.outputs.runId }}
+      # ダウンロードに失敗してもジョブを続行させる (Artifact不在時のガード)
+      continue-on-error: true 
+
+    # -------------------------------------------------------------
+    # ★ 修正 3: Python実行以降の全ステップに、Artifactダウンロード成功の条件を追加
+    # -------------------------------------------------------------
+    # Artifactが存在し、ダウンロードに成功した場合のみ、後続の処理を実行する
     - name: Set up Python
       uses: actions/setup-python@v4
+      if: steps.download_artifact_step.outcome == 'success'
       with:
         python-version: '3.11'
 
@@ -32,24 +58,21 @@ jobs:
         pip install -r requirements.txt
         playwright install chromium
         playwright install-deps
+      if: steps.download_artifact_step.outcome == 'success'
 
     - name: 🔄 Run Checker Bot
       env:
-        # Twitter API Keys (GitHub Secrets)
-        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        # Bot Settings
-        EXECUTION_MODE: 'check' # 監視モードで実行
+        # ... (環境変数設定は省略) ...
+        EXECUTION_MODE: 'check'
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
+      if: steps.download_artifact_step.outcome == 'success'
       
     - name: ⬆️ Re-Upload Updated Schedule Artifact
-      # スクリプトが更新した schedule_data.json をArtifactに上書き保存
       uses: actions/upload-artifact@v4
+      if: steps.download_artifact_step.outcome == 'success'
       with:
         name: latest-schedule-data
         path: schedule_data.json
-        overwrite: true # ★重要な設定: 変更後の状態を上書きして再検出を防ぐ
+        overwrite: true
         retention-days: 1
