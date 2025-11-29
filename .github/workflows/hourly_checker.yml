@@ -11,29 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
-    # GitHub CLI (gh run list) の実行に必要な権限
+    # GitHub API の実行に必要な権限
     permissions:
       actions: read
+      contents: read # Artifactの実行ID取得に必要
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     # -------------------------------------------------------------
-    # 1. GitHub CLI を使用して初回投稿ワークフローの実行IDを見つける
-    #    -> 検索対象を 'schedule-tweet.yml' に修正
+    # 1. GitHub API (gh api) を使用してArtifactが存在する実行IDを取得
     # -------------------------------------------------------------
-    - name: 🔎 Find Initial Post Workflow Run ID using gh cli
+    - name: 🔎 Find Initial Post Workflow Run ID using gh api
       id: find_run
       run: |
-        # 初回投稿ワークフローのファイル名（schedule-tweet.yml）で検索
-        RUN_ID=$(gh run list --workflow=schedule-tweet.yml --status=success --limit 1 --json databaseId | jq -r '.[0].databaseId')
-        
-        if [ "$RUN_ID" != "null" ] && [ -n "$RUN_ID" ]; then
-          echo "Found Run ID: $RUN_ID"
-          echo "runId=$RUN_ID" >> $GITHUB_OUTPUT
+        # Artifactsリストから最新の 'latest-schedule-data' が紐づく実行IDを取得
+        ARTIFACT_ID=$(gh api \
+          -H "Accept: application/vnd.github.v3+json" \
+          /repos/${{ github.repository }}/actions/artifacts?name=latest-schedule-data | \
+          jq -r '.artifacts[] | select(.name == "latest-schedule-data") | .workflow_run.id' | head -n 1)
+
+        if [ -n "$ARTIFACT_ID" ]; then
+          echo "Found Artifact Run ID: $ARTIFACT_ID"
+          echo "runId=$ARTIFACT_ID" >> $GITHUB_OUTPUT
         else
-          echo "No successful run found for artifact download. Skipping check."
+          echo "No active artifact found. Skipping check."
           echo "runId=" >> $GITHUB_OUTPUT
         fi
       env:
