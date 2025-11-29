@@ -14,7 +14,9 @@ from datetime import datetime, timezone, timedelta
 
 # 日本時間のタイムゾーン設定
 JST = timezone(timedelta(hours=9))
-MAIN_TIMES = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
+# ★ 修正: 23:00枠を除外し、キャスターが存在する6つのメイン枠のみを対象とする
+MAIN_TIMES = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00'] 
+EXPECTED_FRAME_COUNT = len(MAIN_TIMES) # 期待される枠数は6
 
 def log(message):
     """ログ出力"""
@@ -287,6 +289,7 @@ class WeatherNewsBot:
         
         # --- (A) 早朝の23:00破棄ロジック (00:00-04:59) ---
         # ターゲット日が「今日」かつ現在時刻が早朝帯（00:00から04:59）の場合に適用
+        # 23:00枠はMAIN_TIMESから除外したが、サイトが返すデータに含まれている可能性があるため、防御的にチェック
         is_early_morning_target_today = (target_date.date() == now_jst.date()) and (0 <= now_jst.hour < 5)
 
         if is_early_morning_target_today and programs and programs[0]['time'] == '23:00':
@@ -294,10 +297,10 @@ class WeatherNewsBot:
             programs = programs[1:]
         
         # --- (B) データ末尾の翌日05:00破棄ロジック ---
-        # 取得枠が多すぎる場合（7枠超）、リスト末尾に混入した翌日の05:00を削除する
-        # この処理は、早朝実行時やデータが正しくDay 1/Day 2に分かれなかった場合に発生した8枠などの問題を解決する
-        if len(programs) > 7 and programs[-1]['time'] == '05:00':
-            log(f"取得枠が多すぎるため、末尾の翌日05:00枠 ({programs[-1]['caster'] if 'caster' in programs[-1] else '不明'}) を破棄しました。")
+        # 取得枠がEXPECTED_FRAME_COUNT (6枠)を超えている場合、リスト末尾の翌日05:00を削除する
+        if len(programs) > EXPECTED_FRAME_COUNT and programs[-1]['time'] == '05:00':
+            caster_info = programs[-1]['caster'] if 'caster' in programs[-1] else '不明'
+            log(f"✅ クリーンアップ成功: 取得枠が {EXPECTED_FRAME_COUNT} 枠超のため、末尾の翌日05:00枠 ({caster_info}) を破棄しました。最終枠数: {len(programs) - 1}")
             programs = programs[:-1]
             
         return programs
