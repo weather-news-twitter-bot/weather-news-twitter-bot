@@ -11,22 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
-    # GitHub API の実行に必要な権限
+    # GitHub API の実行に必要な権限。contents: read は API アクセスに必須。
     permissions:
       actions: read
-      contents: read # Artifactの実行ID取得に必要
+      contents: read 
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions:checkout@v4
 
     # -------------------------------------------------------------
     # 1. GitHub API (gh api) を使用してArtifactが存在する実行IDを取得
+    #    -> Artifactが存在する最新の Run ID を直接特定する
     # -------------------------------------------------------------
-    - name: 🔎 Find Initial Post Workflow Run ID using gh api
+    - name: 🔎 Find Run ID by Artifact existence
       id: find_run
       run: |
         # Artifactsリストから最新の 'latest-schedule-data' が紐づく実行IDを取得
+        # これにより、ダウンロードステップでエラーになった無効な Run ID (例: 3377983690) の取得を避ける
         ARTIFACT_ID=$(gh api \
           -H "Accept: application/vnd.github.v3+json" \
           /repos/${{ github.repository }}/actions/artifacts?name=latest-schedule-data | \
@@ -48,7 +50,7 @@ jobs:
     # -------------------------------------------------------------
     - name: 📦 Download Previous Schedule Artifact
       id: download_artifact_step
-      uses: actions/download-artifact@v4
+      uses: actions:download-artifact@v4
       # Findステップで runId が見つかった場合のみ実行
       if: steps.find_run.outputs.runId != '' 
       with:
@@ -62,7 +64,7 @@ jobs:
     # 3. Pythonの環境構築 (ダウンロード成功時のみ実行)
     # -------------------------------------------------------------
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions:setup-python@v4
       # ダウンロードステップが成功した場合のみ実行
       if: steps.download_artifact_step.outcome == 'success'
       with:
@@ -95,7 +97,7 @@ jobs:
     # 5. 状態ファイルの再アップロード (Python実行成功時のみ実行)
     # -------------------------------------------------------------
     - name: ⬆️ Re-Upload Updated Schedule Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions:upload-artifact@v4
       # ダウンロード成功 AND Pythonスクリプトが成功した場合のみアップロードする
       if: steps.download_artifact_step.outcome == 'success' && success()
       with:
