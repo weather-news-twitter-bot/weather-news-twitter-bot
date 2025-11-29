@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ウェザーニュース番組表スクレイピング＆Twitter投稿 統合版
-機能: リトライ/Playwright&Seleniumフォールバック/更新監視/正確な日付判定/更新ツイート
+機能: リトライ/Playwright&Seleniumフォールバック/更新監視/正確な日付判定/放送済み除外/更新ツイート
 """
 import os
 import json
@@ -66,6 +66,7 @@ class WeatherNewsBot:
     # --- スクレイピング (Playwright & Selenium) ---
     
     async def try_playwright_scraping(self):
+        """Playwrightを使って番組表の全データを取得"""
         try:
             from playwright.async_api import async_playwright
             log("Playwright Async でスクレイピング開始...")
@@ -78,7 +79,7 @@ class WeatherNewsBot:
                 await page.goto(self.url, wait_until="networkidle", timeout=90000)
                 await page.wait_for_timeout(5000)
                 
-                # 全ての番組枠を抽出（日付で切り分けず）
+                # 全ての番組枠を抽出（日付で切り分けず、Python側で処理）
                 all_programs = await page.evaluate(f'''() => {{
                     const result = [];
                     const items = document.querySelectorAll('.boxStyle__item');
@@ -120,7 +121,6 @@ class WeatherNewsBot:
                                 }});
                             }}
                         }} catch (error) {{
-                             // console.error('アイテム処理エラー:', error);
                         }}
                     }});
                     return result;
@@ -139,6 +139,7 @@ class WeatherNewsBot:
             return None
 
     def try_selenium_scraping(self):
+        """Seleniumを使って番組表の全データを取得"""
         try:
             import undetected_chromedriver as uc
             from selenium.webdriver.common.by import By
@@ -213,6 +214,7 @@ class WeatherNewsBot:
             return None
 
     def get_program_name_by_time(self, time_str):
+        """時間帯から番組名を取得 (フォールバック用)"""
         program_info = {
             '05:00': 'ウェザーニュースLiVE・モーニング',
             '08:00': 'ウェザーニュースLiVE・サンシャイン',
@@ -227,35 +229,36 @@ class WeatherNewsBot:
         """
         サイト上の最初の '05:00' を境界線として、番組表を「今日」と「明日」に分割する
         """
-        today_programs = []
-        tomorrow_programs = []
-        found_tomorrow_start = False
+        # サイト上の並び順（時系列順）を尊重し、リストのインデックスで判定する
+        split_index = -1
         
-        # サイトは降順（未来ほど上）の場合と、今日→明日で流れる場合があるため、
-        # 取得したデータは既に時間順に並んでいる前提（スクレイピング順）で処理
-        
-        for program in all_programs:
+        # サイト上の最初の '05:00' を探す
+        for i, program in enumerate(all_programs):
             if program['time'] == '05:00':
-                # 2回目の '05:00' が見つかったら、そこからを「明日」のデータとする
-                if found_tomorrow_start:
-                    tomorrow_programs.append(program)
-                else:
-                    # 1回目の '05:00' は、日付の切れ目と判断し、次のデータを「明日」とする
-                    found_tomorrow_start = True
-                    today_programs.append(program) # 1回目の05:00は今日に含める (05:00-翌05:00が1日分)
-            elif not found_tomorrow_start:
-                today_programs.append(program)
-            else:
-                tomorrow_programs.append(program)
-
-        # 取得できたデータによって today/tomorrow の意味が変わるため、
-        # 最終的に長い方を today_programs として返す（データが多い方を優先）
-        if len(tomorrow_programs) > len(today_programs):
-            # 例: 今が深夜で、明日の方が多く取れた場合
-            return tomorrow_programs, today_programs
-        else:
+                if split_index == -1:
+                    # 最初の 05:00 以降を「次の日」のデータとして判断する
+                    # 例：[08:00, 11:00, ..., 05:00, 08:00] の場合、05:00 の手前までが今日。
+                    split_index = i
+                    break
+        
+        if split_index != -1:
+            today_programs = all_programs[:split_index]
+            tomorrow_programs = all_programs[split_index:]
+            
+            # ただし、サイトの表示が [05:00(今日), 08:00(今日), ..., 05:00(明日)] の場合もあるため、
+            # データの量を見て、適切な方に振り分ける。
+            # 今回は、上から時系列順という前提を重視し、最初の 05:00 の手前を一旦今日の残りのデータと見なす
+            # 最初の 05:00 の枠自体は、サイトの構造により「今日」または「明日」のどちらかに属する
+            # 安全のため、サイト上から取れたリストをそのまま返し、ターゲット日で選択する。
+            
+            # 今回は、サイトが「上から時系列順」であり、05:00を跨いで表示されている前提で、
+            # リストをそのまま返すことで、Python側で日付判定ロジックをシンプルにする。
+            # [今日残り, 明日分] が繋がっている状態と見なす。
+            log(f"番組データが {len(today_programs)} (Day 1) と {len(tomorrow_programs)} (Day 2) に分割されました。")
             return today_programs, tomorrow_programs
-
+        
+        # 05:00が2回出現しない場合（データが1日分しかない場合など）
+        return all_programs, []
 
     def get_fallback_schedule(self):
         """完全フォールバック用スケジュール"""
@@ -274,8 +277,6 @@ class WeatherNewsBot:
         all_programs = None
         
         for attempt in range(1, self.MAX_RETRIES + 1):
-            log(f"--- スクレイピング試行 {attempt}/{self.MAX_RETRIES} 回目 ---")
-
             programs = await self.try_playwright_scraping()
             if programs:
                 all_programs = programs
@@ -287,26 +288,27 @@ class WeatherNewsBot:
                 break
             
             if attempt < self.MAX_RETRIES:
-                log(f"データ取得失敗またはタイムアウト。{self.RETRY_DELAY}秒後にリトライします...")
                 await asyncio.sleep(self.RETRY_DELAY)
             else:
                 log("全リトライ回数失敗。フォールバック処理に移行します。")
                 
         if all_programs:
-            # 取得したデータを「今日」と「明日」に分割
-            today_data, tomorrow_data = self.split_schedule_by_date(all_programs)
+            # 取得したデータを「今日」と「明日」のまとまりに分割
+            # ここで得られるデータはサイトの並び順に準拠している
+            data_set_1, data_set_2 = self.split_schedule_by_date(all_programs)
             
             target_date, target_date_str = self.get_target_date_with_env_control()
             
-            # ターゲット日を基準にデータを選択
+            # ターゲット日を基準にデータセットを選択
             is_tomorrow_target = (target_date.date() - datetime.now(JST).date()).days >= 1
             
+            # サイトの並び順が [今日残りの枠, 明日の枠] の順であることを前提とする
             if is_tomorrow_target:
-                final_programs = tomorrow_data
-                log(f"ターゲット日({target_date_str})が翌日のため、翌日の番組データを選択。")
+                final_programs = data_set_2
+                log(f"ターゲット日({target_date_str})が翌日のため、2番目のデータセットを選択。")
             else:
-                final_programs = today_data
-                log(f"ターゲット日({target_date_str})が本日のため、本日の番組データを選択。")
+                final_programs = data_set_1
+                log(f"ターゲット日({target_date_str})が本日のため、1番目のデータセットを選択。")
                 
             # 取得したデータが空だった場合の最終フォールバック
             if not final_programs:
@@ -314,7 +316,8 @@ class WeatherNewsBot:
                  final_programs = self.get_fallback_schedule()
 
             return {
-                'programs': sorted(final_programs, key=lambda x: x['time']),
+                # サイトの時系列順が正しいので、そのまま返す (Twitter投稿時もソートは不要)
+                'programs': final_programs,
                 'source': 'web_scrape',
                 'timestamp': datetime.now(JST).isoformat()
             }
@@ -347,7 +350,28 @@ class WeatherNewsBot:
         except Exception as e:
             log(f"データの保存失敗: {e}")
 
-    # --- ツイート生成（更新対応版） ---
+    # --- ツイート投稿/生成 ---
+    
+    def post_to_twitter(self, tweet_text):
+        """Twitter投稿 (AttributeError対策としてクラス内に定義)"""
+        try:
+            import tweepy
+            # 環境変数からキーを取得
+            client = tweepy.Client(
+                consumer_key=os.getenv('TWITTER_API_KEY'),
+                consumer_secret=os.getenv('TWITTER_API_SECRET'),
+                access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+                access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
+                wait_on_rate_limit=True
+            )
+            response = client.create_tweet(text=tweet_text)
+            if response.data:
+                log(f"ツイート投稿成功: https://twitter.com/i/web/status/{response.data['id']}")
+                return True
+        except Exception as e:
+            log(f"ツイート投稿エラー: {e}")
+            # Tweepyのインポートエラーもここで捕捉される
+        return False
 
     def has_valid_caster(self, programs):
         """実在のキャスター名があるか判定（未定以外）"""
@@ -359,18 +383,36 @@ class WeatherNewsBot:
         )
 
     def format_normal_tweet_text(self):
-        """通常投稿用のツイート文生成"""
+        """通常投稿用のツイート文生成 (放送済み枠除外ロジック込み)"""
         if not self.schedule_data: return None
         
         target_date, target_date_str = self.get_target_date_with_env_control()
+        now_jst = datetime.now(JST)
+
+        # ターゲット日が「今日」の場合のみ、現在時刻よりも過去の枠をフィルタリング
+        is_target_today = target_date.date() == now_jst.date()
+        
         tweet_text = f"📺 {target_date_str} WNL番組表\n\n"
 
         programs = self.schedule_data['programs']
-        caster_by_time = {p['time']: p['caster'] for p in programs}
         
-        for time_str in MAIN_TIMES:
-            caster = caster_by_time.get(time_str, '未定').replace(' ', '')
-            tweet_text += f"{time_str}- {caster}\n"
+        for program in programs:
+            time_str = program['time']
+            caster = program['caster']
+            
+            # 1. ターゲット日が今日 and 枠の開始時刻が現在時刻よりも前ならスキップ
+            if is_target_today:
+                try:
+                    program_dt = datetime.strptime(f"{target_date.strftime('%Y-%m-%d')} {time_str}", '%Y-%m-%d %H:%M').replace(tzinfo=JST)
+                    
+                    if program_dt < now_jst:
+                        log(f"放送済み枠をスキップ: {time_str}")
+                        continue
+                except ValueError:
+                    continue
+
+            # 2. ツイート行に追加
+            tweet_text += f"{time_str}- {caster.replace(' ', '')}\n"
         
         tweet_text += "\n#ウェザーニュース #番組表"
         return tweet_text
@@ -380,18 +422,36 @@ class WeatherNewsBot:
         キャスター変更を検出した際の更新通知ツイートを生成する
         フォーマット: 05:00- キャスターB (キャスターAから変更:09:20)
         """
+        # 過去データと現在データを時間で辞書化し、比較しやすくする
         prev_map = {p['time']: p['caster'] for p in previous_progs}
         curr_map = {p['time']: p['caster'] for p in current_progs}
         
         tweet_lines = []
         changes_count = 0
         detect_time = datetime.now(JST).strftime('%H:%M')
+        now_jst = datetime.now(JST)
 
-        for time_str in MAIN_TIMES:
+        # ターゲット日の判定
+        target_date, _ = self.get_target_date_with_env_control()
+        is_target_today = target_date.date() == now_jst.date()
+
+        # 現在のプログラムリストを基準にループ (時系列順)
+        for program in current_progs:
+            time_str = program['time']
+            curr_caster = program['caster']
             prev_caster = prev_map.get(time_str)
-            curr_caster = curr_map.get(time_str)
             
-            # 1. 変更判定: 現在のデータがあり、過去のデータと異なるとき
+            # ターゲット日が今日の場合、放送済み枠をスキップ
+            if is_target_today:
+                try:
+                    program_dt = datetime.strptime(f"{target_date.strftime('%Y-%m-%d')} {time_str}", '%Y-%m-%d %H:%M').replace(tzinfo=JST)
+                    if program_dt < now_jst:
+                        log(f"更新チェック時、放送済み枠をスキップ: {time_str}")
+                        continue
+                except ValueError:
+                    continue
+
+            # 1. 変更判定
             if curr_caster and prev_caster and curr_caster != prev_caster:
                 # 【変更あり】
                 line = f"{time_str}- {curr_caster} ({prev_caster}から変更:{detect_time})"
@@ -400,11 +460,8 @@ class WeatherNewsBot:
             elif curr_caster:
                 # 【変更なし】現在のデータを表示
                 line = f"{time_str}- {curr_caster}"
-            elif prev_caster:
-                # 【データ消失】現在のデータが取得できない場合、過去の情報を表示維持
-                # (放送終了時刻は超えていないがサイトから消えた場合を想定)
-                line = f"{time_str}- {prev_caster}"
             else:
+                # ここに来ることは稀だが、データが取得できなかった場合
                 continue
                 
             tweet_lines.append(line)
@@ -467,7 +524,7 @@ class WeatherNewsBot:
             current_data['programs'],
             target_date_str
         )
-        self.schedule_data = current_data # ログ出力用に設定
+        self.schedule_data = current_data
 
         if tweet_text:
             log("変更を検出しました。更新ツイートを投稿します。")
@@ -510,5 +567,4 @@ async def main():
     sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
-    # Windows環境などで実行する場合は、asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy()) が必要になる場合があります。
     asyncio.run(main())
