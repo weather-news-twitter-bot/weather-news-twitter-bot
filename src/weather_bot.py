@@ -72,7 +72,7 @@ class WeatherNewsBot:
             log("Playwright Async でスクレイピング開始...")
             
             async with async_playwright() as p:
-                # ★ 修正箇所: CI環境向けの安定化オプション (--no-sandbox, --disable-dev-shm-usage) を追加
+                # CI環境向けの安定化オプション
                 browser = await p.chromium.launch(
                     headless=True, 
                     args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled']
@@ -80,7 +80,8 @@ class WeatherNewsBot:
                 context = await browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', viewport={'width': 1920, 'height': 1080})
                 page = await context.new_page()
                 
-                await page.goto(self.url, wait_until="networkidle", timeout=90000)
+                # ★ 修正: 待機条件を 'networkidle' から 'domcontentloaded' に緩和し、タイムアウトを120秒に延長
+                await page.goto(self.url, wait_until="domcontentloaded", timeout=120000) 
                 await page.wait_for_timeout(5000)
                 
                 # 全ての番組枠を抽出（日付で切り分けず、Python側で処理）
@@ -153,12 +154,13 @@ class WeatherNewsBot:
             log("Selenium Stealth でスクレイピング開始...")
             
             options = uc.ChromeOptions()
-            # CI環境向けの安定化オプションは既存コードで既に設定済み
+            # CI環境向けの安定化オプション
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--window-size=1920,1080")
             options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            # ★ 修正: このオプションはucdでは認識されない可能性があるため削除し、警告を解消
+            # options.add_experimental_option("excludeSwitches", ["enable-automation"])
             
             driver = uc.Chrome(options=options, headless=True)
             driver.set_page_load_timeout(120)
@@ -283,6 +285,7 @@ class WeatherNewsBot:
                 break
             
             if attempt < self.MAX_RETRIES:
+                log(f"スクレイピング失敗。{self.RETRY_DELAY}秒後にリトライします。 ({attempt}/{self.MAX_RETRIES})")
                 await asyncio.sleep(self.RETRY_DELAY)
             else:
                 log("全リトライ回数失敗。フォールバック処理に移行します。")
@@ -488,6 +491,12 @@ class WeatherNewsBot:
             self.save_current_data(schedule_data)
             return False
 
+        # ★ 追加: ツイートスキップフラグのチェック (通常モード)
+        if os.getenv('SKIP_TWEET_FLAG') == 'true':
+            log("SKIP_TWEET_FLAGが'true'のため、ツイート投稿をスキップします。")
+            self.save_current_data(schedule_data)
+            return True # スキップしたので成功とみなす
+
         tweet_text = self.format_normal_tweet_text()
         success = self.post_to_twitter(tweet_text)
         
@@ -522,6 +531,13 @@ class WeatherNewsBot:
 
         if tweet_text:
             log("変更を検出しました。更新ツイートを投稿します。")
+            
+            # ★ 追加: ツイートスキップフラグのチェック (監視モード)
+            if os.getenv('SKIP_TWEET_FLAG') == 'true':
+                log("SKIP_TWEET_FLAGが'true'のため、ツイート投稿をスキップします。状態ファイルは更新します。")
+                current_data['target_date_jst'] = target_date_str
+                self.save_current_data(current_data)
+                return True
             
             if self.post_to_twitter(tweet_text):
                 current_data['target_date_jst'] = target_date_str
