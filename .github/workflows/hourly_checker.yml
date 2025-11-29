@@ -10,24 +10,35 @@ jobs:
   check_and_update:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    
+    # GitHub CLI (gh run list) の実行に必要な権限
+    permissions:
+      actions: read
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     # -------------------------------------------------------------
-    # 1. Artifactの実行IDを見つける (他のワークフローの成功実行を特定)
+    # 1. GitHub CLI を使用して初回投稿ワークフローの実行IDを見つける
     # -------------------------------------------------------------
-    - name: 🔎 Find Initial Post Workflow Run ID
+    - name: 🔎 Find Initial Post Workflow Run ID using gh cli
       id: find_run
-      # 他ワークフローのArtifactを参照するために必須
-      uses: "xt0rted/actions-find-artifact@v2"
-      with:
-        # 初回投稿ワークフローのYAMLファイル名
-        workflow: weather_news_bot.yml
-        artifactName: latest-schedule-data
-        branch: ${{ github.ref_name }} 
-        status: success
+      run: |
+        # 初回投稿ワークフロー（weather_news_bot.yml）の最新の成功した実行IDを取得
+        # jqを使ってJSONからIDを抽出
+        RUN_ID=$(gh run list --workflow=weather_news_bot.yml --status=success --limit 1 --json databaseId | jq -r '.[0].databaseId')
+        
+        if [ "$RUN_ID" != "null" ] && [ -n "$RUN_ID" ]; then
+          echo "Found Run ID: $RUN_ID"
+          echo "runId=$RUN_ID" >> $GITHUB_OUTPUT
+        else
+          echo "No successful run found for artifact download. Skipping check."
+          echo "runId=" >> $GITHUB_OUTPUT
+        fi
+      env:
+        # gh CLI認証のためにGITHUB_TOKENを使用（自動提供される）
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # -------------------------------------------------------------
     # 2. Artifactをダウンロード（実行IDを指定し、失敗を許容）
@@ -39,7 +50,7 @@ jobs:
       if: steps.find_run.outputs.runId != '' 
       with:
         name: latest-schedule-data
-        path: . # カレントディレクトリに schedule_data.json が配置される (zipが自動解凍される)
+        path: . # カレントディレクトリに schedule_data.json が配置される
         run-id: ${{ steps.find_run.outputs.runId }}
       # Artifactが見つからない場合、このステップは失敗するが、ジョブは続行される
       continue-on-error: true 
@@ -49,7 +60,7 @@ jobs:
     # -------------------------------------------------------------
     - name: Set up Python
       uses: actions/setup-python@v4
-      # ダウンロードステップが成功した場合のみ実行 (Artifactが存在する/見つかった場合)
+      # ダウンロードステップが成功した場合のみ実行
       if: steps.download_artifact_step.outcome == 'success'
       with:
         python-version: '3.11'
@@ -78,11 +89,11 @@ jobs:
       if: steps.download_artifact_step.outcome == 'success'
       
     # -------------------------------------------------------------
-    # 5. 状態ファイルの再アップロード (ダウンロード成功時のみ実行)
+    # 5. 状態ファイルの再アップロード (Python実行成功時のみ実行)
     # -------------------------------------------------------------
     - name: ⬆️ Re-Upload Updated Schedule Artifact
       uses: actions/upload-artifact@v4
-      # スクリプトが成功した場合 (outcome == 'success') のみアップロードする
+      # ダウンロード成功 AND Pythonスクリプトが成功した場合のみアップロードする
       if: steps.download_artifact_step.outcome == 'success' && success()
       with:
         name: latest-schedule-data
