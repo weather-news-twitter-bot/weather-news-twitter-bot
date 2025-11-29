@@ -279,24 +279,27 @@ class WeatherNewsBot:
             })
         return programs
 
-    # ★ 追加: 早朝の23:00枠を破棄するクリーンアップロジック
     def clean_schedule_data(self, programs, target_date):
         """
-        早朝実行時（00:00-04:59）に、ターゲット日の先頭に前日分の23:00枠が残っていた場合にこれを破棄する。
+        早朝実行時の23:00枠破棄と、データセットの末尾に混入した翌日の05:00枠を破棄する。
         """
         now_jst = datetime.now(JST)
         
-        # ターゲット日が「今日」であり、かつ現在時刻が早朝帯（00:00から04:59）の場合にのみ処理を適用
-        is_early_morning = (target_date.date() == now_jst.date()) and (0 <= now_jst.hour < 5)
+        # --- (A) 早朝の23:00破棄ロジック (00:00-04:59) ---
+        # ターゲット日が「今日」かつ現在時刻が早朝帯（00:00から04:59）の場合に適用
+        is_early_morning_target_today = (target_date.date() == now_jst.date()) and (0 <= now_jst.hour < 5)
 
-        if not is_early_morning:
-            return programs
-        
-        # リストの先頭が '23:00' であれば、破棄する
-        if programs and programs[0]['time'] == '23:00':
+        if is_early_morning_target_today and programs and programs[0]['time'] == '23:00':
             log(f"早朝実行のため、先頭に残った前日分の23:00枠 ({programs[0]['caster'] if 'caster' in programs[0] else '不明'}) を破棄しました。")
-            return programs[1:]
+            programs = programs[1:]
         
+        # --- (B) データ末尾の翌日05:00破棄ロジック ---
+        # 取得枠が多すぎる場合（7枠超）、リスト末尾に混入した翌日の05:00を削除する
+        # この処理は、早朝実行時やデータが正しくDay 1/Day 2に分かれなかった場合に発生した8枠などの問題を解決する
+        if len(programs) > 7 and programs[-1]['time'] == '05:00':
+            log(f"取得枠が多すぎるため、末尾の翌日05:00枠 ({programs[-1]['caster'] if 'caster' in programs[-1] else '不明'}) を破棄しました。")
+            programs = programs[:-1]
+            
         return programs
 
     async def scrape_schedule(self):
@@ -326,7 +329,8 @@ class WeatherNewsBot:
             
             target_date, target_date_str = self.get_target_date_with_env_control()
 
-            # ★ 修正箇所：データセットを確定する前にクリーンアップを実行
+            # ★ 修正：データセットを確定する前に、クリーンアップを実行
+            # クリーンアップにより、Day 1やDay 2のデータ数が変化しても、後の補完ロジックで対応可能
             data_set_1 = self.clean_schedule_data(data_set_1, target_date)
             data_set_2 = self.clean_schedule_data(data_set_2, target_date)
             
