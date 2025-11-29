@@ -80,9 +80,16 @@ class WeatherNewsBot:
                 context = await browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', viewport={'width': 1920, 'height': 1080})
                 page = await context.new_page()
                 
-                # ★ 修正: 待機条件を 'networkidle' から 'domcontentloaded' に緩和し、タイムアウトを120秒に延長
+                # 待機条件を 'domcontentloaded' に緩和し、タイムアウトを120秒に延長
                 await page.goto(self.url, wait_until="domcontentloaded", timeout=120000) 
-                await page.wait_for_timeout(5000)
+                
+                # ★ 修正: 固定の5秒待機を削除し、キャスター要素の出現を最大30秒待つ
+                try:
+                    await page.wait_for_selector('a[href*="caster"]', timeout=30000)
+                    log("キャスター情報要素の出現を確認しました。")
+                except Exception:
+                    # 30秒以内に出現しなくても、他のデータは抽出するため処理は続行
+                    log("キャスター情報要素は30秒以内に出現しませんでした。抽出処理に進みます。")
                 
                 # 全ての番組枠を抽出（日付で切り分けず、Python側で処理）
                 all_programs = await page.evaluate(f'''() => {{
@@ -159,7 +166,7 @@ class WeatherNewsBot:
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--window-size=1920,1080")
             options.add_argument("--disable-blink-features=AutomationControlled")
-            # ★ 修正: このオプションはucdでは認識されない可能性があるため削除し、警告を解消
+            # 警告解消のため削除
             # options.add_experimental_option("excludeSwitches", ["enable-automation"])
             
             driver = uc.Chrome(options=options, headless=True)
@@ -491,7 +498,7 @@ class WeatherNewsBot:
             self.save_current_data(schedule_data)
             return False
 
-        # ★ 追加: ツイートスキップフラグのチェック (通常モード)
+        # ツイートスキップフラグのチェック (通常モード)
         if os.getenv('SKIP_TWEET_FLAG') == 'true':
             log("SKIP_TWEET_FLAGが'true'のため、ツイート投稿をスキップします。")
             self.save_current_data(schedule_data)
@@ -532,7 +539,7 @@ class WeatherNewsBot:
         if tweet_text:
             log("変更を検出しました。更新ツイートを投稿します。")
             
-            # ★ 追加: ツイートスキップフラグのチェック (監視モード)
+            # ツイートスキップフラグのチェック (監視モード)
             if os.getenv('SKIP_TWEET_FLAG') == 'true':
                 log("SKIP_TWEET_FLAGが'true'のため、ツイート投稿をスキップします。状態ファイルは更新します。")
                 current_data['target_date_jst'] = target_date_str
