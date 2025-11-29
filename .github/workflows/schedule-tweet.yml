@@ -1,37 +1,45 @@
-name: 📺 Weather News Bot (Initial Post)
+name: 📅 Weather News Bot (Initial Post)
 
 on:
   schedule:
-    # 毎日 JST 18:00 (UTC 9:00) に実行
+    # 毎日 JST 18:00 (UTC 09:00) に実行
     - cron: '0 9 * * *'
-  workflow_dispatch:
-    inputs:
-      target_mode:
-        description: '対象日モード (auto, today, tomorrow)'
-        required: true
-        default: 'auto'
-      
+  workflow_dispatch: # 手動実行を許可
+
 jobs:
   post_schedule:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 10
+    
+    # 🚨 必須: リポジトリへのプッシュ権限 (コミットを行うため)
+    permissions:
+      contents: write
+      
     steps:
-    - name: Checkout repository
+    - name: Checkout repository (with full history)
       uses: actions/checkout@v4
+      with:
+        # 履歴全体を取得しないと、コミットが失敗することがあるため
+        fetch-depth: 0
 
+    # -------------------------------------------------------------
+    # 1. Pythonの環境構築
+    # -------------------------------------------------------------
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-        
+
     - name: Install dependencies and Playwright Browsers
       run: |
         pip install -r requirements.txt
         playwright install chromium
         playwright install-deps
 
-    - name: ⚙️ Run Weather News Bot (Normal Mode)
+    # -------------------------------------------------------------
+    # 2. 初回投稿ロジックの実行 (データ生成 & ツイート)
+    # -------------------------------------------------------------
+    - name: 📢 Run Initial Post Bot
       env:
         # Twitter API Keys (GitHub Secrets)
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
@@ -39,15 +47,19 @@ jobs:
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
         # Bot Settings
-        SCHEDULE_TARGET_MODE: ${{ github.event.inputs.target_mode || 'auto' }}
-        EXECUTION_MODE: 'normal'
+        EXECUTION_MODE: 'post' # 初回投稿モードで実行
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
-
-    - name: 📦 Save Initial Schedule Artifact
-      uses: actions/upload-artifact@v4
+      
+    # -------------------------------------------------------------
+    # 3. 状態ファイルのコミットとプッシュ (Artifactsの代替)
+    # -------------------------------------------------------------
+    - name: 💾 Commit and Push Schedule Data to Repo
+      # Pythonスクリプトが成功した場合のみ実行
+      if: success()
+      uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        name: latest-schedule-data  # 監視用ワークフローと共通の名前
-        path: schedule_data.json
-        overwrite: true
-        retention-days: 1 # 1日保持すれば十分
+        commit_message: "BOT: Initial post schedule data commit"
+        # 生成された schedule_data.json のみをコミット対象とする
+        files: schedule_data.json
+        # GITHUB_TOKENは自動的に使用される
