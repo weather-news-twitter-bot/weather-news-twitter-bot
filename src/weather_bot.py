@@ -279,6 +279,26 @@ class WeatherNewsBot:
             })
         return programs
 
+    # ★ 追加: 早朝の23:00枠を破棄するクリーンアップロジック
+    def clean_schedule_data(self, programs, target_date):
+        """
+        早朝実行時（00:00-04:59）に、ターゲット日の先頭に前日分の23:00枠が残っていた場合にこれを破棄する。
+        """
+        now_jst = datetime.now(JST)
+        
+        # ターゲット日が「今日」であり、かつ現在時刻が早朝帯（00:00から04:59）の場合にのみ処理を適用
+        is_early_morning = (target_date.date() == now_jst.date()) and (0 <= now_jst.hour < 5)
+
+        if not is_early_morning:
+            return programs
+        
+        # リストの先頭が '23:00' であれば、破棄する
+        if programs and programs[0]['time'] == '23:00':
+            log(f"早朝実行のため、先頭に残った前日分の23:00枠 ({programs[0]['caster'] if 'caster' in programs[0] else '不明'}) を破棄しました。")
+            return programs[1:]
+        
+        return programs
+
     async def scrape_schedule(self):
         """Playwright → Selenium → Fallback の順で試行し、リトライする"""
         all_programs = None
@@ -305,6 +325,10 @@ class WeatherNewsBot:
             data_set_1, data_set_2 = self.split_schedule_by_date(all_programs)
             
             target_date, target_date_str = self.get_target_date_with_env_control()
+
+            # ★ 修正箇所：データセットを確定する前にクリーンアップを実行
+            data_set_1 = self.clean_schedule_data(data_set_1, target_date)
+            data_set_2 = self.clean_schedule_data(data_set_2, target_date)
             
             # ターゲット日を基準にデータセットを選択
             is_tomorrow_target = (target_date.date() - datetime.now(JST).date()).days >= 1
