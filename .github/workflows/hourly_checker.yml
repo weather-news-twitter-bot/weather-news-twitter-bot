@@ -1,0 +1,55 @@
+name: 🔄 Weather News Hourly Checker
+
+on:
+  schedule:
+    # JST 19:00 (UTC 10:00) から 翌日 JST 17:00 (UTC 8:00) まで1時間毎に実行
+    - cron: '0 10-23,0-8 * * *' 
+  workflow_dispatch:
+
+jobs:
+  check_and_update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: 📦 Download Previous Schedule Artifact
+      # 初回投稿ワークフローで保存したファイルをダウンロード
+      uses: actions/download-artifact@v4
+      with:
+        name: latest-schedule-data
+        path: . # カレントディレクトリに schedule_data.json が配置される
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies and Playwright Browsers
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+        playwright install-deps
+
+    - name: 🔄 Run Checker Bot
+      env:
+        # Twitter API Keys (GitHub Secrets)
+        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        # Bot Settings
+        EXECUTION_MODE: 'check' # 監視モードで実行
+        TZ: 'Asia/Tokyo'
+      run: python src/weather_bot.py
+      
+    - name: ⬆️ Re-Upload Updated Schedule Artifact
+      # スクリプトが更新した schedule_data.json をArtifactに上書き保存
+      uses: actions/upload-artifact@v4
+      with:
+        name: latest-schedule-data
+        path: schedule_data.json
+        overwrite: true # ★重要な設定: 変更後の状態を上書きして再検出を防ぐ
+        retention-days: 1
