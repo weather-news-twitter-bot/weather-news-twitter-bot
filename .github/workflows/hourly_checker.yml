@@ -11,33 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
-    # リポジトリへのプッシュ権限が必要 (コミットを行うため)
     permissions:
-      contents: write
-      
+      contents: write 
+
     steps:
     - name: Checkout repository (with full history)
       uses: actions/checkout@v4
       with:
-        # 履歴全体を取得しないと、コミットが失敗することがあるため
         fetch-depth: 0
 
-    # -------------------------------------------------------------
-    # 1. 永続データ（schedule_data.json）の取得
-    #    -> リポジトリにコミットされたファイルを直接使用するため、特別なダウンロードは不要
-    # -------------------------------------------------------------
     - name: 📦 Retrieve Schedule Data from Repository
       run: |
-        # 既に checkout ステップでファイルは取得されているため、ログ出力のみ
         if [ -f "schedule_data.json" ]; then
-          echo "Schedule data loaded from repository."
+          echo "Schedule data loaded successfully from repository."
         else
-          echo "Warning: schedule_data.json not found in repository. Initial check may fail."
+          echo "Error: schedule_data.json not found. Skipping check."
+          exit 1
         fi
 
-    # -------------------------------------------------------------
-    # 2. Pythonの環境構築 
-    # -------------------------------------------------------------
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -49,29 +40,20 @@ jobs:
         playwright install chromium
         playwright install-deps
 
-    # -------------------------------------------------------------
-    # 3. 監視ロジックの実行
-    # -------------------------------------------------------------
     - name: 🔄 Run Checker Bot
-      id: run_checker
       env:
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        EXECUTION_MODE: 'check' # 監視モードで実行
+        EXECUTION_MODE: 'check'
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
       
-    # -------------------------------------------------------------
-    # 4. 状態ファイルのコミットとプッシュ (変更があった場合のみ)
-    # -------------------------------------------------------------
     - name: ⬆️ Commit and Push Updated Schedule Data
-      # Pythonスクリプトが成功した場合のみ実行
       if: success()
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "BOT: Update schedule_data.json after hourly check"
-        # 変更されたファイルのみコミット
-        files: schedule_data.json
-        # GITHUB_TOKENは自動的に使用される
+        # files -> file_pattern に修正
+        file_pattern: schedule_data.json
