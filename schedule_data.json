@@ -35,9 +35,21 @@
       "caster": "駒木 結衣",
       "program": "ウェザーニュースLiVE・ムーン",
       "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+    },
+    {
+      "time": "05:00",
+      "caster": "魚住 茉由",
+      "program": "ウェザーニュースLiVE・モーニング",
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
+    },
+    {
+      "time": "08:00",
+      "caster": "青原 桃香",
+      "program": "ウェザーニュースLiVE・サンシャイン",
+      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
     }
   ],
   "source": "web_scrape",
-  "timestamp": "2025-11-29T18:17:00.934060+09:00",
+  "timestamp": "2025-11-30T05:19:21.223686+09:00",
   "target_date_jst": "2025年11月30日"
 }
