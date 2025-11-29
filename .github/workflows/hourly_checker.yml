@@ -11,63 +11,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
-    # GitHub API の実行に必要な権限
+    # リポジトリへのプッシュ権限が必要 (コミットを行うため)
     permissions:
-      actions: read
-      contents: read 
-
+      contents: write
+      
     steps:
-    - name: Checkout repository
+    - name: Checkout repository (with full history)
       uses: actions/checkout@v4
-
-    # -------------------------------------------------------------
-    # 1. GitHub API (gh api) を使用してArtifactが存在する実行IDを取得
-    #    -> ブランチをフィルタリングして最新の実行IDを確実に取得
-    # -------------------------------------------------------------
-    - name: 🔎 Find Run ID by Artifact existence (Final Fix)
-      id: find_run
-      run: |
-        # 現在のブランチ名を取得
-        CURRENT_BRANCH=${{ github.ref_name }}
-        
-        # Artifactsリストから、現在のブランチの最新の Artifact が紐づく実行IDを取得
-        ARTIFACT_ID=$(gh api \
-          -H "Accept: application/vnd.github.v3+json" \
-          /repos/${{ github.repository }}/actions/artifacts | \
-          jq -r --arg name "latest-schedule-data" \
-          --arg branch "$CURRENT_BRANCH" \
-          '.artifacts[] | select(.name == $name and .workflow_run.head_branch == $branch) | .workflow_run.id' | head -n 1)
-
-        if [ -n "$ARTIFACT_ID" ]; then
-          echo "Found Artifact Run ID: $ARTIFACT_ID on branch $CURRENT_BRANCH"
-          echo "runId=$ARTIFACT_ID" >> $GITHUB_OUTPUT
-        else
-          echo "No active artifact found on branch $CURRENT_BRANCH. Skipping check."
-          echo "runId=" >> $GITHUB_OUTPUT
-        fi
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    # -------------------------------------------------------------
-    # 2. Artifactをダウンロード（実行IDを指定し、失敗を許容）
-    # -------------------------------------------------------------
-    - name: 📦 Download Previous Schedule Artifact
-      id: download_artifact_step
-      uses: actions/download-artifact@v4
-      # Findステップで runId が見つかった場合のみ実行
-      if: steps.find_run.outputs.runId != '' 
       with:
-        name: latest-schedule-data
-        path: . 
-        run-id: ${{ steps.find_run.outputs.runId }}
-      continue-on-error: true 
+        # 履歴全体を取得しないと、コミットが失敗することがあるため
+        fetch-depth: 0
 
     # -------------------------------------------------------------
-    # 3. Pythonの環境構築 (ダウンロード成功時のみ実行)
+    # 1. 永続データ（schedule_data.json）の取得
+    #    -> リポジトリにコミットされたファイルを直接使用するため、特別なダウンロードは不要
+    # -------------------------------------------------------------
+    - name: 📦 Retrieve Schedule Data from Repository
+      run: |
+        # 既に checkout ステップでファイルは取得されているため、ログ出力のみ
+        if [ -f "schedule_data.json" ]; then
+          echo "Schedule data loaded from repository."
+        else
+          echo "Warning: schedule_data.json not found in repository. Initial check may fail."
+        fi
+
+    # -------------------------------------------------------------
+    # 2. Pythonの環境構築 
     # -------------------------------------------------------------
     - name: Set up Python
       uses: actions/setup-python@v4
-      if: steps.download_artifact_step.outcome == 'success'
       with:
         python-version: '3.11'
 
@@ -76,30 +48,30 @@ jobs:
         pip install -r requirements.txt
         playwright install chromium
         playwright install-deps
-      if: steps.download_artifact_step.outcome == 'success'
 
     # -------------------------------------------------------------
-    # 4. 監視ロジックの実行 (ダウンロード成功時のみ実行)
+    # 3. 監視ロジックの実行
     # -------------------------------------------------------------
     - name: 🔄 Run Checker Bot
+      id: run_checker
       env:
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        EXECUTION_MODE: 'check'
+        EXECUTION_MODE: 'check' # 監視モードで実行
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
-      if: steps.download_artifact_step.outcome == 'success'
       
     # -------------------------------------------------------------
-    # 5. 状態ファイルの再アップロード (Python実行成功時のみ実行)
+    # 4. 状態ファイルのコミットとプッシュ (変更があった場合のみ)
     # -------------------------------------------------------------
-    - name: ⬆️ Re-Upload Updated Schedule Artifact
-      uses: actions/upload-artifact@v4
-      if: steps.download_artifact_step.outcome == 'success' && success()
+    - name: ⬆️ Commit and Push Updated Schedule Data
+      # Pythonスクリプトが成功した場合のみ実行
+      if: success()
+      uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        name: latest-schedule-data
-        path: schedule_data.json
-        overwrite: true
-        retention-days: 1
+        commit_message: "BOT: Update schedule_data.json after hourly check"
+        # 変更されたファイルのみコミット
+        files: schedule_data.json
+        # GITHUB_TOKENは自動的に使用される
