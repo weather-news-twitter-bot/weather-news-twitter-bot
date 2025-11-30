@@ -5,6 +5,12 @@ on:
     # JST 19:00 (UTC 10:00) から 翌日 JST 17:00 (UTC 8:00) まで1時間毎に実行
     - cron: '0 10-23,0-8 * * *' 
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '動作確認モード（チェックを入れると投稿をスキップ）'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   check_and_update:
@@ -40,20 +46,20 @@ jobs:
         playwright install chromium
         playwright install-deps
 
-    - name: 🔄 Run Checker Bot
+    - name: 🔄 Run Watch Mode
       env:
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-        EXECUTION_MODE: 'check'
+        EXECUTION_MODE: 'watch'
+        SKIP_TWEET_FLAG: ${{ github.event.inputs.dry_run }}
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
       
     - name: ⬆️ Commit and Push Updated Schedule Data
-      if: success()
+      if: success() && github.event.inputs.dry_run != 'true'
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "BOT: Update schedule_data.json after hourly check"
-        # files -> file_pattern に修正
         file_pattern: schedule_data.json
