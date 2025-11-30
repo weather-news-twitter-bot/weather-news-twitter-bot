@@ -9,8 +9,8 @@
     - 番組表の変更を検出して更新通知
 
 実行モード (EXECUTION_MODE):
-    - post:  番組表を取得してツイート投稿
-    - watch: 前回データと比較し、変更があれば更新通知
+    - post:  番組表を取得してツイート投稿 (schedule-tweet.yml に指定の時刻)
+    - watch: 前回データと比較し、変更があれば更新通知 (hourly_checker.yml に指定の間隔)
 
 動作確認モード (SKIP_TWEET_FLAG=true):
     - 全処理を実行するが、ツイート投稿とコミットをスキップ
@@ -49,12 +49,12 @@ async def main():
     2つの環境変数で動作を制御する:
 
     軸1: 何をするか (EXECUTION_MODE)
-        - post:  番組表を取得してツイート投稿
-        - watch: 前回と比較し、変更があれば更新ツイート
+        - post:  番組表を取得してツイート投稿 (schedule-tweet.yml に指定の時刻)
+        - watch: 前回と比較し、変更があれば更新ツイート (hourly_checker.yml に指定の間隔)
 
     軸2: 本当に投稿するか (SKIP_TWEET_FLAG)
         - false または未設定: 本番モード（実際に投稿）
-        - true: 動作確認モード（投稿以外の全処理を実行）
+        - true: 動作確認モード（投稿・コミットをスキップ）
 
     Environment Variables:
         EXECUTION_MODE: 'post'(デフォルト) or 'watch'
