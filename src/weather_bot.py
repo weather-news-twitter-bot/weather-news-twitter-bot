@@ -43,19 +43,30 @@ async def main():
     """
     エントリーポイント。
 
+    2つの環境変数で動作を制御する:
+
+    軸1: 何をするか (EXECUTION_MODE)
+        - post:  番組表を取得してツイート投稿
+        - watch: 前回と比較し、変更があれば更新ツイート
+
+    軸2: 本当に投稿するか (SKIP_TWEET_FLAG)
+        - false または未設定: 本番モード（実際に投稿）
+        - true: 動作確認モード（投稿以外の全処理を実行）
+
     Environment Variables:
-        EXECUTION_MODE: 'normal'(デフォルト) or 'check'
+        EXECUTION_MODE: 'post'(デフォルト) or 'watch'
+        SKIP_TWEET_FLAG: 'true' で動作確認モード
     """
     log("=== ウェザーニュースボット開始 ===")
     log(f"現在時刻: {now_jst().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    mode = os.getenv('EXECUTION_MODE', 'normal').lower()
+    mode = os.getenv('EXECUTION_MODE', 'post').lower()
     log(f"実行モード: {mode}")
 
-    if mode == 'check':
-        success = await run_check_mode()
+    if mode == 'watch':
+        success = await run_watch_mode()
     else:
-        success = await run_normal_mode()
+        success = await run_post_mode()
 
     # 結果ファイル出力
     result = {
@@ -69,9 +80,9 @@ async def main():
     sys.exit(0 if success else 1)
 
 
-async def run_normal_mode() -> bool:
+async def run_post_mode() -> bool:
     """
-    通常モード: 番組表を取得してツイート投稿。
+    投稿モード: 番組表を取得してツイート投稿。
 
     処理フロー:
         1. 対象日を決定
@@ -83,7 +94,7 @@ async def run_normal_mode() -> bool:
     Returns:
         処理成功ならTrue
     """
-    log("=== 通常モード開始 ===")
+    log("=== 投稿モード開始 ===")
 
     # 1. 対象日を決定
     target_date, target_date_str = get_target_date()
@@ -116,8 +127,8 @@ async def run_normal_mode() -> bool:
     tweet_text = build_schedule_tweet(upcoming, target_date_str)
 
     # 6. ツイート投稿
-    if should_skip_tweet():
-        log("SKIP_TWEET_FLAG により投稿スキップ")
+    if is_dry_run():
+        log("動作確認モード: ツイート投稿をスキップ")
         save_data(programs, target_date_str, source)
         return True
 
@@ -126,16 +137,16 @@ async def run_normal_mode() -> bool:
     # 7. データ保存
     save_data(programs, target_date_str, source)
 
-    log(f"=== 通常モード完了: {'成功' if success else '失敗'} ===")
+    log(f"=== 投稿モード完了: {'成功' if success else '失敗'} ===")
     return success
 
 
-async def run_check_mode() -> bool:
+async def run_watch_mode() -> bool:
     """
     監視モード: 前回データと比較し、変更があれば更新通知。
 
     処理フロー:
-        1. 前回データを読み込み（なければ通常モードへ）
+        1. 前回データを読み込み（なければ投稿モードへ）
         2. 番組表をスクレイピング
         3. 有効なキャスターチェック
         4. 変更を検出
@@ -150,8 +161,8 @@ async def run_check_mode() -> bool:
     # 1. 前回データを読み込み
     saved = load_saved_data()
     if not saved:
-        log("前回データなし。通常モードで実行")
-        return await run_normal_mode()
+        log("前回データなし。投稿モードで実行")
+        return await run_post_mode()
 
     target_date, _ = get_target_date()
     target_date_str = saved.get('target_date_str', '日付不明')
@@ -184,8 +195,8 @@ async def run_check_mode() -> bool:
     log("変更を検出。更新ツイートを投稿")
 
     # 5. ツイート投稿
-    if should_skip_tweet():
-        log("SKIP_TWEET_FLAG により投稿スキップ")
+    if is_dry_run():
+        log("動作確認モード: ツイート投稿をスキップ")
         save_data(programs, target_date_str, 'web_scrape')
         return True
 
@@ -819,19 +830,22 @@ def post_to_twitter(tweet_text: str) -> bool:
     return False
 
 
-def should_skip_tweet() -> bool:
+def is_dry_run() -> bool:
     """
-    ツイート投稿をスキップすべきか判定する。
+    動作確認モードかどうかを判定する。
+
+    動作確認モードでは全処理を実行するが、
+    実際のツイート投稿だけをスキップする。
 
     Returns:
-        スキップすべきならTrue
+        動作確認モードならTrue
 
     Examples:
-        >>> if should_skip_tweet():
-        ...     print("テストモード: ツイートをスキップ")
+        >>> if is_dry_run():
+        ...     print("動作確認モード: ツイートをスキップ")
 
     Environment Variables:
-        SKIP_TWEET_FLAG: 'true' でスキップ
+        SKIP_TWEET_FLAG: 'true' で動作確認モード
     """
     return os.getenv('SKIP_TWEET_FLAG') == 'true'
 
