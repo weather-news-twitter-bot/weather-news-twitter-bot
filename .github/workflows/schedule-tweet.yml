@@ -15,8 +15,8 @@ on:
         - auto
         - today
         - tomorrow
-      skip_tweet: # ★ 新規追加: ツイートスキップ用チェックボックス
-        description: 'チェックを入れると、Twitterへの投稿をスキップします (データ保存のみ実行)'
+      dry_run:
+        description: '動作確認モード（チェックを入れると投稿をスキップ）'
         required: true
         default: false
         type: boolean
@@ -46,7 +46,7 @@ jobs:
         playwright install chromium
         playwright install-deps
 
-    - name: 📢 Run Initial Post Bot
+    - name: 📢 Run Post Mode
       env:
         # Twitter API Keys (GitHub Secrets)
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
@@ -56,13 +56,12 @@ jobs:
         # Bot Settings
         EXECUTION_MODE: 'post'
         SCHEDULE_TARGET_MODE: ${{ github.event.inputs.mode }}
-        # ★ 新規追加: skip_tweet入力を環境変数に渡す
-        SKIP_TWEET_FLAG: ${{ github.event.inputs.skip_tweet }}
+        SKIP_TWEET_FLAG: ${{ github.event.inputs.dry_run }}
         TZ: 'Asia/Tokyo'
       run: python src/weather_bot.py
       
     - name: 💾 Commit and Push Schedule Data to Repo
-      if: success()
+      if: success() && github.event.inputs.dry_run != 'true'
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: "BOT: Initial post schedule data commit"
