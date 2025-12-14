@@ -26,9 +26,9 @@
     },
     {
       "time": "17:00",
-      "caster": "白井 ゆかり",
+      "caster": "駒木 結衣",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/shirai.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
     },
     {
       "time": "20:00",
@@ -37,7 +37,7 @@
       "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
-  "target_date_str": "2025年12月14日",
+  "target_date_str": "2025年12月15日",
   "source": "web_scrape",
-  "timestamp": "2025-12-13T18:17:01.960805+09:00"
+  "timestamp": "2025-12-14T18:17:13.955890+09:00"
 }
