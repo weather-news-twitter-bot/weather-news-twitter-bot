@@ -20,9 +20,9 @@
     },
     {
       "time": "14:00",
-      "caster": "江川 清音",
+      "caster": "川畑 玲",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/egawa.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kawabata.html"
     },
     {
       "time": "17:00",
@@ -39,5 +39,5 @@
   ],
   "target_date_str": "2025年12月19日",
   "source": "web_scrape",
-  "timestamp": "2025-12-18T18:23:49.603179+09:00"
+  "timestamp": "2025-12-18T23:37:08.313522+09:00"
 }
