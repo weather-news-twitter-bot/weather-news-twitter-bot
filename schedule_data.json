@@ -26,18 +26,18 @@
     },
     {
       "time": "17:00",
-      "caster": "小林 李衣奈",
+      "caster": "山岸 愛梨",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
     },
     {
       "time": "20:00",
-      "caster": "山岸 愛梨",
+      "caster": "戸北 美月",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
-  "target_date_str": "2025年12月27日",
+  "target_date_str": "2025年12月28日",
   "source": "web_scrape",
-  "timestamp": "2025-12-26T18:19:57.169244+09:00"
+  "timestamp": "2025-12-27T18:17:46.547712+09:00"
 }
