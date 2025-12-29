@@ -829,6 +829,8 @@ def post_to_twitter(tweet_text: str) -> bool:
 
     except Exception as e:
         log(f"ツイートエラー: {e}")
+        if hasattr(e, 'response'):
+            log(f"詳細: {e.response.text}")  # ← これを追加except Exception as e:
 
     return False
 
