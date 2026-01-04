@@ -2,7 +2,7 @@ name: 📅 Weather News Bot (Initial Post)
 
 on:
   schedule:
-    # 毎日 JST 18:15 (UTC 09:00) に実行
+    # 毎日 JST 18:15 (UTC 09:15) に実行
     - cron: '15 9 * * *'
   workflow_dispatch: # 手動実行を許可
     inputs:
