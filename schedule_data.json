@@ -14,15 +14,15 @@
     },
     {
       "time": "11:00",
-      "caster": "岡本 結子 リサ",
+      "caster": "江川 清音",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/egawa.html"
     },
     {
       "time": "14:00",
-      "caster": "戸北 美月",
+      "caster": "岡本 結子 リサ",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
     },
     {
       "time": "17:00",
@@ -32,12 +32,12 @@
     },
     {
       "time": "20:00",
-      "caster": "小林 李衣奈",
+      "caster": "小川 千奈",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
     }
   ],
-  "target_date_str": "2026年01月08日",
+  "target_date_str": "2026年01月09日",
   "source": "web_scrape",
-  "timestamp": "2026-01-07T18:40:23.020514+09:00"
+  "timestamp": "2026-01-08T18:40:49.638844+09:00"
 }
