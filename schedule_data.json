@@ -2,21 +2,21 @@
   "programs": [
     {
       "time": "05:00",
-      "caster": "福吉 貴文",
+      "caster": "松本 真央",
       "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
       "time": "08:00",
-      "caster": "青原 桃香",
+      "caster": "田辺 真南葉",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
     },
     {
       "time": "11:00",
-      "caster": "江川 清音",
+      "caster": "魚住 茉由",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/egawa.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
     },
     {
       "time": "14:00",
@@ -32,12 +32,12 @@
     },
     {
       "time": "20:00",
-      "caster": "駒木 結衣",
+      "caster": "戸北 美月",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
-  "target_date_str": "2026年01月16日",
+  "target_date_str": "2026年01月17日",
   "source": "web_scrape",
-  "timestamp": "2026-01-15T18:41:19.071011+09:00"
+  "timestamp": "2026-01-16T18:39:16.431226+09:00"
 }
