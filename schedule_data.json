@@ -1,16 +1,28 @@
 {
   "programs": [
     {
+      "time": "05:00",
+      "caster": "福吉 貴文",
+      "program": "ウェザーニュースLiVE・モーニング",
+      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
+    },
+    {
+      "time": "08:00",
+      "caster": "田辺 真南葉",
+      "program": "ウェザーニュースLiVE・サンシャイン",
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+    },
+    {
       "time": "11:00",
-      "caster": "岡本 結子 リサ",
+      "caster": "白井 ゆかり",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/shirai.html"
     },
     {
       "time": "14:00",
-      "caster": "白井 ゆかり",
+      "caster": "川畑 玲",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/shirai.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kawabata.html"
     },
     {
       "time": "17:00",
@@ -25,7 +37,7 @@
       "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
-  "target_date_str": "2026年01月26日",
+  "target_date_str": "2026年01月27日",
   "source": "web_scrape",
-  "timestamp": "2026-01-26T11:34:51.011200+09:00"
+  "timestamp": "2026-01-26T18:48:36.684374+09:00"
 }
