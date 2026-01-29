@@ -8,9 +8,9 @@
     },
     {
       "time": "08:00",
-      "caster": "青原 桃香",
+      "caster": "松本 真央",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
       "time": "11:00",
@@ -39,5 +39,5 @@
   ],
   "target_date_str": "2026年01月30日",
   "source": "web_scrape",
-  "timestamp": "2026-01-29T18:59:04.693722+09:00"
+  "timestamp": "2026-01-29T23:49:01.813130+09:00"
 }
