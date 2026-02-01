@@ -8,36 +8,36 @@
     },
     {
       "time": "08:00",
-      "caster": "魚住 茉由",
+      "caster": "松本 真央",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
       "time": "11:00",
-      "caster": "田辺 真南葉",
-      "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
-    },
-    {
-      "time": "14:00",
       "caster": "山岸 愛梨",
-      "program": "ウェザーニュースLiVE・アフタヌーン",
+      "program": "ウェザーニュースLiVE・コーヒータイム",
       "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
     },
     {
+      "time": "14:00",
+      "caster": "小川 千奈",
+      "program": "ウェザーニュースLiVE・アフタヌーン",
+      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
+    },
+    {
       "time": "17:00",
-      "caster": "駒木 結衣",
+      "caster": "小林 李衣奈",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
     },
     {
       "time": "20:00",
-      "caster": "小川 千奈",
+      "caster": "戸北 美月",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
-  "target_date_str": "2026年02月01日",
+  "target_date_str": "2026年02月02日",
   "source": "web_scrape",
-  "timestamp": "2026-01-31T23:33:13.669933+09:00"
+  "timestamp": "2026-02-01T18:44:56.329691+09:00"
 }
