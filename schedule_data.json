@@ -26,18 +26,18 @@
     },
     {
       "time": "17:00",
-      "caster": "小林 李衣奈",
+      "caster": "戸北 美月",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     },
     {
       "time": "20:00",
-      "caster": "戸北 美月",
+      "caster": "小林 李衣奈",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
     }
   ],
   "target_date_str": "2026年03月07日",
   "source": "web_scrape",
-  "timestamp": "2026-03-06T18:55:09.075879+09:00"
+  "timestamp": "2026-03-06T23:46:41.448242+09:00"
 }
