@@ -2,15 +2,15 @@
   "programs": [
     {
       "time": "05:00",
-      "caster": "田辺 真南葉",
+      "caster": "松本 真央",
       "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
       "time": "08:00",
-      "caster": "青原 桃香",
+      "caster": "魚住 茉由",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
     },
     {
       "time": "11:00",
@@ -39,5 +39,5 @@
   ],
   "target_date_str": "2026年03月31日",
   "source": "web_scrape",
-  "timestamp": "2026-03-30T19:40:09.077870+09:00"
+  "timestamp": "2026-03-31T18:12:38.244595+09:00"
 }
