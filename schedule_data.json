@@ -2,9 +2,9 @@
   "programs": [
     {
       "time": "05:00",
-      "caster": "岡本 結子 リサ",
+      "caster": "魚住 茉由",
       "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
     },
     {
       "time": "08:00",
@@ -20,9 +20,9 @@
     },
     {
       "time": "14:00",
-      "caster": "小川 千奈",
+      "caster": "白井 ゆかり",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/shirai.html"
     },
     {
       "time": "17:00",
@@ -37,7 +37,7 @@
       "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
     }
   ],
-  "target_date_str": "2026年04月22日",
+  "target_date_str": "2026年04月23日",
   "source": "web_scrape",
-  "timestamp": "2026-04-21T23:03:13.016636+09:00"
+  "timestamp": "2026-04-22T19:41:43.710035+09:00"
 }
