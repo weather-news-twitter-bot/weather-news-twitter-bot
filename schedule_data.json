@@ -2,9 +2,9 @@
   "programs": [
     {
       "time": "05:00",
-      "caster": "福吉 貴文",
+      "caster": "松本 真央",
       "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
       "time": "08:00",
@@ -14,30 +14,30 @@
     },
     {
       "time": "11:00",
-      "caster": "小川 千奈",
+      "caster": "魚住 茉由",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
     },
     {
       "time": "14:00",
-      "caster": "山岸 愛梨",
+      "caster": "小川 千奈",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
     },
     {
       "time": "17:00",
-      "caster": "小林 李衣奈",
+      "caster": "戸北 美月",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     },
     {
       "time": "20:00",
-      "caster": "戸北 美月",
+      "caster": "駒木 結衣",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
     }
   ],
-  "target_date_str": "2026年05月12日",
+  "target_date_str": "2026年05月13日",
   "source": "web_scrape",
-  "timestamp": "2026-05-11T21:21:19.366666+09:00"
+  "timestamp": "2026-05-12T20:27:00.585213+09:00"
 }
