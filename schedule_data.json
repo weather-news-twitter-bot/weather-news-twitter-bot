@@ -20,9 +20,9 @@
     },
     {
       "time": "14:00",
-      "caster": "駒木 結衣",
+      "caster": "山岸 愛梨",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
     },
     {
       "time": "17:00",
@@ -39,5 +39,5 @@
   ],
   "target_date_str": "2026年06月03日",
   "source": "web_scrape",
-  "timestamp": "2026-06-02T21:50:52.649288+09:00"
+  "timestamp": "2026-06-03T00:00:07.120646+09:00"
 }
