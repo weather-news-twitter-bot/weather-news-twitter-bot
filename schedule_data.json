@@ -8,9 +8,9 @@
     },
     {
       "time": "08:00",
-      "caster": "田辺 真南葉",
+      "caster": "福吉 貴文",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
     },
     {
       "time": "11:00",
@@ -39,5 +39,5 @@
   ],
   "target_date_str": "2026年06月18日",
   "source": "web_scrape",
-  "timestamp": "2026-06-17T21:57:26.852765+09:00"
+  "timestamp": "2026-06-18T03:27:59.849147+09:00"
 }
