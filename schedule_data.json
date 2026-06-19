@@ -1,12 +1,6 @@
 {
   "programs": [
     {
-      "time": "05:00",
-      "caster": "岡本 結子 リサ",
-      "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
-    },
-    {
       "time": "08:00",
       "caster": "魚住 茉由",
       "program": "ウェザーニュースLiVE・サンシャイン",
@@ -14,9 +8,9 @@
     },
     {
       "time": "11:00",
-      "caster": "田辺 真南葉",
+      "caster": "魚住 茉由",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
     },
     {
       "time": "14:00",
@@ -39,5 +33,5 @@
   ],
   "target_date_str": "2026年06月20日",
   "source": "web_scrape",
-  "timestamp": "2026-06-19T21:53:38.488609+09:00"
+  "timestamp": "2026-06-20T08:07:06.196721+09:00"
 }
