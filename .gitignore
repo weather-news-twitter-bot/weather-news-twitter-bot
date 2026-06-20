@@ -192,3 +192,14 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Claude Code: keep local-only, never upload
+CLAUDE.md
+.claude/
+
+# Secrets: never commit (public repo)
+.env
+.secrets/
+*.token
+*bearer*
+*_secret*

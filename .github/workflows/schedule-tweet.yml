@@ -40,11 +40,8 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install dependencies and Playwright Browsers
-      run: |
-        pip install -r requirements.txt
-        playwright install chromium
-        playwright install-deps
+    - name: Install dependencies
+      run: pip install -r requirements.txt
 
     - name: 📢 Run Post Mode
       env:

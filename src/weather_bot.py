@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ウェザーニュース番組表スクレイピング＆Twitter投稿ボット
+ウェザーニュース番組表取得＆Twitter投稿ボット
 
 機能:
-    - ウェザーニュースLiVEの番組表をスクレイピング
+    - ウェザーニュースLiVEの番組表を公開JSON APIから取得
     - 担当キャスター情報をTwitterに投稿
     - 番組表の変更を検出して更新通知
+
+データ源:
+    - 番組表: https://site.weathernews.jp/site/live/json/timetable.json
+      （サイトのVue.jsが描画に使う真のデータ源。caster は識別コード）
+    - キャスターコード→漢字名: timetable.html の caster_trans()/caster_kanji()
+      を実行時に抽出（新キャスター追加にも追従。失敗時はハードコード辞書）
 
 実行モード (EXECUTION_MODE):
     - post:  番組表を取得してツイート投稿 (schedule-tweet.yml に指定の時刻)
@@ -21,6 +27,7 @@ import sys
 import re
 import asyncio
 import time
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -28,15 +35,45 @@ from typing import Optional
 # 定数
 # =============================================================================
 JST = timezone(timedelta(hours=9))
-TIMETABLE_URL = "https://weathernews.jp/wnl/timetable.html"
+
+# 番組表の真のデータ源（サイトのVue.jsが描画に使う公開JSON）と、
+# キャスターコード→漢字名の対応表を持つHTMLページ。
+TIMETABLE_JSON_URL = "https://site.weathernews.jp/site/live/json/timetable.json"
+TIMETABLE_HTML_URL = "https://weathernews.jp/wnl/timetable.html"
 DATA_FILE = 'schedule_data.json'
 
-# キャスターが担当する有効な放送枠（05:00開始が1日の始まり）
-VALID_TIME_SLOTS = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
+# 放送日は 05:00 を境界に区切られる（05:00開始が1日の始まり）。
+# 取得枠は固定しない（12:30 等の変則枠にも追従する）。標準枠はフォールバック生成にのみ使う。
+STANDARD_TIME_SLOTS = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
 
-# スクレイピング設定
-MAX_RETRIES = 10
-RETRY_DELAY_SEC = 60
+# 取得設定（JSON APIは安定しているのでリトライは控えめ）
+MAX_RETRIES = 5
+RETRY_DELAY_SEC = 15
+HTTP_TIMEOUT_SEC = 30
+USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/120.0 Safari/537.36')
+
+# キャスターコードの正規化表 / 漢字名表のフォールバック。
+# 通常はページJSから動的抽出するが、抽出失敗時はこのスナップショットを使う。
+# （出典: timetable.html の caster_trans() / caster_kanji()）
+FALLBACK_CASTER_TRANS = {
+    'ailin': 'yamagishi', 'hiyama2018': 'hiyama', 'izumin': 'maie',
+    'komaki2018': 'komaki', 'matsu': 'matsuyuki', 'ohshima': 'oshima',
+    'sayane': 'egawa', 'yuki': 'uchida', 'aohara2023': 'aohara',
+    'okamoto2023': 'okamoto', 'tanabe2025': 'tanabe', 'matsumoto2025': 'matsumoto',
+}
+FALLBACK_CASTER_KANJI = {
+    'yamagishi': '山岸 愛梨', 'egawa': '江川 清音', 'maie': '眞家 泉',
+    'matsuyuki': '松雪 彩花', 'shirai': '白井 ゆかり', 'takayama': '高山 奈々',
+    'hiyama': '檜山 沙耶', 'komaki': '駒木 結衣', 'uchida': '内田 侑希',
+    'oshima': '大島 璃音', 'tokita': '戸北 美月', 'kawabata': '川畑 玲',
+    'kobayashi': '小林 李衣奈', 'ogawa': '小川 千奈', 'uozumi': '魚住 茉由',
+    'aohara': '青原 桃香', 'okamoto': '岡本 結子 リサ', 'fukuyoshi': '福吉 貴文',
+    'tanabe': '田辺 真南葉', 'matsumoto': '松本 真央',
+}
+
+# キャスター対応表のキャッシュ（プロセス内で1回だけ取得）
+_CASTER_MAPS = None
 
 
 # =============================================================================
@@ -89,7 +126,7 @@ async def run_post_mode() -> bool:
 
     処理フロー:
         1. 対象日を決定
-        2. 番組表をスクレイピング
+        2. 番組表を取得
         3. 対象日のデータを抽出
         4. 有効なキャスターがいればツイート投稿
         5. データを保存
@@ -102,7 +139,7 @@ async def run_post_mode() -> bool:
     # 1. 対象日を決定
     target_date, target_date_str = get_target_date()
 
-    # 2. スクレイピング
+    # 2. 取得
     all_programs = await fetch_schedule()
 
     # 3. 対象日のデータを抽出
@@ -118,7 +155,7 @@ async def run_post_mode() -> bool:
         log(f"  {p['time']} - {p['caster']}")
 
     # 4. 有効なキャスターチェック
-    source = 'web_scrape' if has_valid_caster(programs) else 'fallback'
+    source = 'json_api' if has_valid_caster(programs) else 'fallback'
 
     if not has_valid_caster(programs):
         log("有効なキャスター情報なし。ツイートをスキップ")
@@ -132,6 +169,7 @@ async def run_post_mode() -> bool:
     # 6. ツイート投稿
     if is_dry_run():
         log("動作確認モード: ツイート投稿をスキップ")
+        log("=== 生成されるツイート ===\n" + tweet_text)
         save_data(programs, target_date_str, source)
         return True
 
@@ -150,7 +188,7 @@ async def run_watch_mode() -> bool:
 
     処理フロー:
         1. 前回データを読み込み（なければ投稿モードへ）
-        2. 番組表をスクレイピング
+        2. 番組表を取得
         3. 有効なキャスターチェック
         4. 変更を検出
         5. 変更があれば更新ツイート投稿
@@ -170,7 +208,7 @@ async def run_watch_mode() -> bool:
     target_date, _ = get_target_date()
     target_date_str = saved.get('target_date_str', '日付不明')
 
-    # 2. スクレイピング
+    # 2. 取得
     all_programs = await fetch_schedule()
     programs = extract_target_day_programs(all_programs, target_date)
 
@@ -200,11 +238,12 @@ async def run_watch_mode() -> bool:
     # 5. ツイート投稿
     if is_dry_run():
         log("動作確認モード: ツイート投稿をスキップ")
-        save_data(programs, target_date_str, 'web_scrape')
+        log("=== 生成されるツイート ===\n" + tweet_text)
+        save_data(programs, target_date_str, 'json_api')
         return True
 
     if post_to_twitter(tweet_text):
-        save_data(programs, target_date_str, 'web_scrape')
+        save_data(programs, target_date_str, 'json_api')
         log("=== 監視モード完了: 更新投稿成功 ===")
         return True
     else:
@@ -291,17 +330,130 @@ def is_today(target_date: datetime) -> bool:
 
 
 # =============================================================================
-# 2. データ取得（スクレイピング）
+# 2. データ取得（JSON API）
 # =============================================================================
+def http_get(url: str, cache_bust: bool = True) -> str:
+    """
+    URLをGETして本文（テキスト）を返す。
+
+    Args:
+        url: 取得先URL
+        cache_bust: True ならCDNキャッシュ回避用のクエリを付与
+
+    Returns:
+        レスポンス本文（UTF-8デコード済み）
+    """
+    if cache_bust:
+        sep = '&' if '?' in url else '?'
+        url = f"{url}{sep}tm={int(time.time() * 1000)}"
+
+    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SEC) as resp:
+        return resp.read().decode('utf-8', errors='replace')
+
+
+def parse_js_caster_map(html: str, func_name: str) -> dict:
+    """
+    ページJS内の caster_trans() / caster_kanji() のような
+    `if(x == "key"){ ret_name = "value"; }` 形式の対応表を抽出する。
+
+    Args:
+        html: timetable.html の本文
+        func_name: 'caster_trans' or 'caster_kanji'
+
+    Returns:
+        {key: value} の辞書（抽出できなければ空辞書）
+
+    Examples:
+        >>> trans = parse_js_caster_map(html, 'caster_trans')
+        >>> trans['matsumoto2025']
+        'matsumoto'
+    """
+    start = html.find(f'function {func_name}(')
+    if start == -1:
+        return {}
+
+    # 次の関数定義までを当該関数の本体とみなす
+    end = html.find('function ', start + len(f'function {func_name}('))
+    body = html[start:end] if end != -1 else html[start:start + 8000]
+
+    pairs = re.findall(
+        r'==\s*"([^"]+)"\s*\)\s*\{\s*ret_name\s*=\s*"([^"]+)"',
+        body
+    )
+    return {key: value for key, value in pairs}
+
+
+def get_caster_maps() -> tuple[dict, dict]:
+    """
+    キャスターコード正規化表 / 漢字名表を取得する（プロセス内キャッシュ）。
+
+    まず timetable.html から動的抽出を試み、新キャスター追加にも追従する。
+    抽出に失敗した場合はハードコードのスナップショットにフォールバックする。
+
+    Returns:
+        (正規化表, 漢字名表) のタプル
+    """
+    global _CASTER_MAPS
+    if _CASTER_MAPS is not None:
+        return _CASTER_MAPS
+
+    trans_map, kanji_map = {}, {}
+    try:
+        html = http_get(TIMETABLE_HTML_URL)
+        trans_map = parse_js_caster_map(html, 'caster_trans')
+        kanji_map = parse_js_caster_map(html, 'caster_kanji')
+        log(f"キャスター対応表を抽出: 正規化{len(trans_map)}件 / 漢字{len(kanji_map)}件")
+    except Exception as e:
+        log(f"キャスター対応表の抽出に失敗: {e}")
+
+    # 漢字名表が取れなければフォールバック
+    if not kanji_map:
+        log("ページからの抽出に失敗 → ハードコード辞書を使用")
+        trans_map = dict(FALLBACK_CASTER_TRANS)
+        kanji_map = dict(FALLBACK_CASTER_KANJI)
+
+    _CASTER_MAPS = (trans_map, kanji_map)
+    return _CASTER_MAPS
+
+
+def resolve_caster_name(code: str) -> tuple[str, str]:
+    """
+    キャスターコードを漢字名とプロフィールURLに解決する。
+
+    サイトと同じ2段変換: caster_trans でコード正規化 → caster_kanji で漢字名。
+
+    Args:
+        code: JSONの caster フィールド（例: 'matsumoto2025'）
+
+    Returns:
+        (漢字名, プロフィールURL) のタプル。未知のコードは漢字名にコードを返す。
+
+    Examples:
+        >>> resolve_caster_name('matsumoto2025')
+        ('松本 真央', 'https://weathernews.jp/wnl/caster/matsumoto.html')
+    """
+    trans_map, kanji_map = get_caster_maps()
+    normalized = trans_map.get(code, code)
+    name = kanji_map.get(normalized)
+    profile_url = f"https://weathernews.jp/wnl/caster/{normalized}.html"
+
+    if not name:
+        log(f"未知のキャスターコード: '{code}' (正規化: '{normalized}')")
+        name = normalized  # 暫定でローマ字表記を使う
+
+    return name, profile_url
+
+
 async def fetch_schedule() -> list[dict]:
     """
-    番組表データを取得する（リトライ付き）。
+    番組表データを取得する（JSON API、リトライ付き）。
 
-    Playwright → Selenium → フォールバック の順で試行。
-    最大MAX_RETRIES回リトライする。
+    最大MAX_RETRIES回リトライし、全滅時はフォールバックを返す。
 
     Returns:
         番組データのリスト（フォールバック含め必ず返る）
+        各要素: {'time': '05:00', 'caster': '名前', 'program': '番組名', 'profile_url': 'URL'}
 
     Examples:
         >>> programs = await fetch_schedule()
@@ -309,19 +461,12 @@ async def fetch_schedule() -> list[dict]:
         ...     print(f"{p['time']} - {p['caster']}")
     """
     for attempt in range(1, MAX_RETRIES + 1):
-        # Playwright を試行
-        programs = await fetch_with_playwright()
+        programs = fetch_from_json_api()
         if programs:
             return programs
 
-        # Selenium を試行
-        programs = fetch_with_selenium()
-        if programs:
-            return programs
-
-        # リトライ
         if attempt < MAX_RETRIES:
-            log(f"スクレイピング失敗。{RETRY_DELAY_SEC}秒後にリトライ ({attempt}/{MAX_RETRIES})")
+            log(f"取得失敗。{RETRY_DELAY_SEC}秒後にリトライ ({attempt}/{MAX_RETRIES})")
             await asyncio.sleep(RETRY_DELAY_SEC)
         else:
             log("全リトライ失敗。フォールバックを使用")
@@ -329,190 +474,77 @@ async def fetch_schedule() -> list[dict]:
     return create_fallback_schedule()
 
 
-async def fetch_with_playwright() -> Optional[list[dict]]:
+def fetch_from_json_api() -> Optional[list[dict]]:
     """
-    Playwrightを使用して番組表データを取得する。
+    公開JSON APIから番組表を取得して整形する。
+
+    - 取得枠は固定しない → 12:30 等の変則枠もそのまま通る
+    - キャスター不在枠（深夜の自動放送、caster が空）はスキップする
 
     Returns:
-        番組データのリスト。失敗時はNone。
-        各要素: {'time': '05:00', 'caster': '名前', 'program': '番組名', 'profile_url': 'URL'}
+        番組データのリスト。失敗・データなしは None。
+        各要素: {'time': '05:00', 'caster': '魚住 茉由', 'program': '...', 'profile_url': '...'}
 
     Examples:
-        >>> programs = await fetch_with_playwright()
+        >>> programs = fetch_from_json_api()
         >>> if programs:
-        ...     for p in programs:
-        ...         print(f"{p['time']} - {p['caster']}")
-        05:00 - 山岸愛梨
-        08:00 - 檜山沙耶
+        ...     print(f"{len(programs)}枠を取得")
     """
     try:
-        from playwright.async_api import async_playwright
-        log("Playwright でスクレイピング開始...")
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-dev-shm-usage',
-                      '--disable-blink-features=AutomationControlled']
-            )
-            context = await browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                viewport={'width': 1920, 'height': 1080}
-            )
-            page = await context.new_page()
-
-            await page.goto(TIMETABLE_URL, wait_until="domcontentloaded", timeout=120000)
-
-            # キャスター情報の読み込み待機
-            try:
-                await page.wait_for_selector('a[href*="caster"]', timeout=30000)
-                log("キャスター情報の出現を確認")
-                await page.wait_for_timeout(5000)
-            except Exception:
-                log("キャスター情報が30秒以内に出現せず。抽出を続行")
-
-            # データ抽出
-            programs = await page.evaluate(f'''() => {{
-                const result = [];
-                const validSlots = {VALID_TIME_SLOTS};
-
-                document.querySelectorAll('.boxStyle__item').forEach(item => {{
-                    try {{
-                        const timeText = item.querySelector('p')?.textContent?.trim() || '';
-                        const timeMatch = timeText.match(/(\\d{{2}}:\\d{{2}})-/);
-                        if (!timeMatch) return;
-
-                        const timeStr = timeMatch[1];
-                        if (!validSlots.includes(timeStr)) return;
-
-                        const programEl = item.querySelector('p.bold');
-                        const programName = programEl?.textContent?.trim() || 'ウェザーニュースLiVE';
-
-                        const casterLink = item.querySelector('a[href*="caster"]');
-                        const casterName = casterLink?.textContent?.trim() || '未定';
-                        const casterUrl = casterLink?.href || '';
-
-                        result.push({{
-                            time: timeStr,
-                            caster: casterName,
-                            program: programName,
-                            profile_url: casterUrl
-                        }});
-                    }} catch (e) {{}}
-                }});
-                return result;
-            }}''')
-
-            await browser.close()
-
-            if programs and len(programs) > 0:
-                log(f"Playwright: {len(programs)}枠を取得")
-                return programs
-
-            log("Playwright: データ取得なし")
-            return None
-
+        raw = http_get(TIMETABLE_JSON_URL)
+        entries = json.loads(raw)
     except Exception as e:
-        log(f"Playwright エラー: {e}")
+        log(f"JSON API取得エラー: {e}")
         return None
 
-
-def fetch_with_selenium() -> Optional[list[dict]]:
-    """
-    Seleniumを使用して番組表データを取得する（Playwrightのフォールバック）。
-
-    Returns:
-        番組データのリスト。失敗時はNone。
-
-    Examples:
-        >>> programs = fetch_with_selenium()
-        >>> if programs:
-        ...     print(f"{len(programs)}枠を取得しました")
-    """
-    try:
-        import undetected_chromedriver as uc
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-
-        log("Selenium でスクレイピング開始...")
-
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-
-        driver = uc.Chrome(options=options, headless=True)
-        driver.set_page_load_timeout(120)
-        driver.implicitly_wait(15)
-        driver.get(TIMETABLE_URL)
-
-        WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "boxStyle__item"))
-        )
-        time.sleep(15)
-
-        programs = []
-        for item in driver.find_elements(By.CLASS_NAME, "boxStyle__item"):
-            try:
-                time_elements = item.find_elements(By.TAG_NAME, "p")
-                if not time_elements:
-                    continue
-
-                time_text = time_elements[0].text.strip()
-                time_match = re.search(r'(\d{2}:\d{2})-', time_text)
-                if not time_match:
-                    continue
-
-                time_str = time_match.group(1)
-                if time_str not in VALID_TIME_SLOTS:
-                    continue
-
-                program_elements = item.find_elements(By.CSS_SELECTOR, "p.bold")
-                program_name = program_elements[0].text.strip() if program_elements else "ウェザーニュースLiVE"
-
-                caster_links = item.find_elements(By.CSS_SELECTOR, "a[href*='caster']")
-                caster_name = caster_links[0].text.strip() if caster_links else '未定'
-                caster_url = caster_links[0].get_attribute('href') if caster_links else ''
-
-                programs.append({
-                    'time': time_str,
-                    'caster': caster_name,
-                    'program': program_name,
-                    'profile_url': caster_url
-                })
-            except Exception:
-                continue
-
-        driver.quit()
-
-        if programs:
-            log(f"Selenium: {len(programs)}枠を取得")
-            return programs
-
-        log("Selenium: データ取得なし")
+    if not isinstance(entries, list) or not entries:
+        log("JSON APIのデータが空")
         return None
 
-    except Exception as e:
-        log(f"Selenium エラー: {e}")
+    programs = []
+    for entry in entries:
+        hour = (entry.get('hour') or '').strip()
+        code = (entry.get('caster') or '').strip()
+        title = (entry.get('title') or '').strip()
+
+        # 時刻形式（HH:MM）でなければスキップ
+        if not re.match(r'^\d{2}:\d{2}$', hour):
+            continue
+
+        # キャスター不在枠（深夜の自動放送）はスキップ
+        if not code:
+            continue
+
+        name, profile_url = resolve_caster_name(code)
+        programs.append({
+            'time': hour,
+            'caster': name,
+            'program': title,
+            'profile_url': profile_url
+        })
+
+    if not programs:
+        log("有効なキャスター枠が取得できず")
         return None
+
+    log(f"JSON API: {len(programs)}枠を取得")
+    return programs
 
 
 def create_fallback_schedule() -> list[dict]:
     """
-    スクレイピング失敗時のフォールバック用スケジュールを生成する。
+    取得失敗時のフォールバック用スケジュールを生成する。
 
-    全枠「未定」のデータを返す。これにより has_valid_caster() が
-    Falseを返し、ツイートはスキップされる。
+    標準枠を全て「未定」で返す。これにより has_valid_caster() が
+    Falseを返し、ツイートはスキップされる（誤投稿防止）。
 
     Returns:
         全枠「未定」の番組データリスト
 
     Examples:
         >>> fallback = create_fallback_schedule()
-        >>> print(fallback[0])
-        {'time': '05:00', 'caster': '未定', 'program': 'ウェザーニュースLiVE・モーニング'}
+        >>> print(fallback[0]['caster'])
+        未定
     """
     log("フォールバック: 全枠「未定」のスケジュールを生成")
 
@@ -526,8 +558,8 @@ def create_fallback_schedule() -> list[dict]:
     }
 
     return [
-        {'time': t, 'caster': '未定', 'program': program_names[t]}
-        for t in VALID_TIME_SLOTS
+        {'time': t, 'caster': '未定', 'program': program_names[t], 'profile_url': ''}
+        for t in STANDARD_TIME_SLOTS
     ]
 
 
@@ -542,14 +574,14 @@ def extract_target_day_programs(all_programs: list[dict], target_date: datetime)
     05:00を1日の境界として、今日/明日のデータを判別する。
 
     Args:
-        all_programs: サイトから取得した全番組データ（時系列順）
+        all_programs: 取得した全番組データ（時系列順）
         target_date: 抽出したい日付
 
     Returns:
-        対象日の番組データリスト（最大6枠）
+        対象日の番組データリスト（枠数は固定しない）
 
     Examples:
-        >>> # 18時以降に実行（サイトには今日の残り + 明日の全枠が表示）
+        >>> # 18時以降に実行（今日の残り + 明日の全枠が並ぶ）
         >>> all_data = await fetch_schedule()
         >>> target, _ = get_target_date()  # 翌日が対象
         >>> tomorrow_programs = extract_target_day_programs(all_data, target)
@@ -580,14 +612,15 @@ def extract_target_day_programs(all_programs: list[dict], target_date: datetime)
     if is_tomorrow:
         selected = day2_programs
         log("翌日が対象 → Day2を選択")
+        # 翌々日（次の05:00以降）が混ざらないよう1放送日分に絞る
+        for j in range(1, len(selected)):
+            if selected[j]['time'] == '05:00':
+                log(f"翌々日分を除外: {len(selected) - j}枠")
+                selected = selected[:j]
+                break
     else:
         selected = day1_programs if day1_programs else day2_programs
         log(f"今日が対象 → {'Day1' if day1_programs else 'Day2(補完)'}を選択")
-
-    # 枠数を6に制限（超過分は破棄）
-    if len(selected) > len(VALID_TIME_SLOTS):
-        log(f"枠数超過({len(selected)}枠)。{len(VALID_TIME_SLOTS)}枠に制限")
-        selected = selected[:len(VALID_TIME_SLOTS)]
 
     return selected
 
@@ -829,8 +862,8 @@ def post_to_twitter(tweet_text: str) -> bool:
 
     except Exception as e:
         log(f"ツイートエラー: {e}")
-        if hasattr(e, 'response'):
-            log(f"詳細: {e.response.text}")  # ← これを追加except Exception as e:
+        if hasattr(e, 'response') and e.response is not None:
+            log(f"詳細: {e.response.text}")
 
     return False
 
@@ -865,10 +898,10 @@ def save_data(programs: list[dict], target_date_str: str, source: str) -> None:
     Args:
         programs: 番組データのリスト
         target_date_str: 対象日の表示文字列
-        source: データソース ('web_scrape' or 'fallback')
+        source: データソース ('json_api' or 'fallback')
 
     Examples:
-        >>> save_data(programs, '2025年01月15日', 'web_scrape')
+        >>> save_data(programs, '2025年01月15日', 'json_api')
     """
     data = {
         'programs': programs,

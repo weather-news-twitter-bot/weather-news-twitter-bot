@@ -1,11 +1,7 @@
-# === ウェザーニュースボット用依存関係（2025安定版）===
+# === ウェザーニュースボット用依存関係 ===
+#
+# 番組表は公開JSON API（site.weathernews.jp/.../timetable.json）を
+# urllib（標準ライブラリ）で直接取得するため、ブラウザ自動化系の依存は不要。
 
 # Twitter API
 tweepy>=4.14.0
-
-# ブラウザ自動化
-playwright>=1.40.0
-undetected-chromedriver>=3.5.0
-
-# Selenium (undetected-chromedriverの親であり、コード内で直接importしているため必須)
-selenium>=4.15.0
