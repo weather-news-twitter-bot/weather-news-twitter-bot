@@ -37,6 +37,7 @@ JST = timezone(timedelta(hours=9))
 TIMETABLE_JSON_URL = "https://site.weathernews.jp/site/live/json/timetable.json"
 TIMETABLE_HTML_URL = "https://weathernews.jp/wnl/timetable.html"
 DATA_FILE = 'schedule_data.json'
+HISTORY_FILE = 'history.jsonl'   # 統計・長期記録用の追記専用ログ（判断には不使用）
 
 # 翌日告知を出す時刻（JST）。この時刻以降の最初の実行で告知する。
 ANNOUNCE_HOUR = 21
@@ -421,26 +422,29 @@ def post_to_twitter(tweet_text: str) -> bool:
 
 
 # ============================ 永続化 ============================
-def save_data(target: date, programs: list[dict], announced_date: Optional[str]) -> None:
+def save_data(target: date, tweeted: list[dict], full: list[dict],
+              announced_date: Optional[str]) -> None:
     """
     追跡状態を保存する。
 
     Args:
         target: 追跡中の放送日
-        programs: その日の baseline ラインナップ
+        tweeted: 最後に告知/通知したキャスター表（決定・変更の差分基準＝フォロワー認識）
+        full: その放送日のフル時刻表（全枠を蓄積したもの。アーカイブ/final用）
         announced_date: 最後に告知した放送日(ISO) ※idempotency用
     """
     data = {
         'target_date': target.isoformat(),
         'target_date_str': format_jp_date(target),
         'announced_date': announced_date,
-        'programs': programs,
+        'tweeted': tweeted,
+        'full': full,
         'timestamp': now_jst().isoformat(),
     }
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        log(f"保存: target={target.isoformat()} / {len(programs)}枠 / announced={announced_date}")
+        log(f"保存: target={target.isoformat()} tweeted={len(tweeted)} full={len(full)} announced={announced_date}")
     except Exception as e:
         log(f"保存エラー: {e}")
 
@@ -457,10 +461,97 @@ def load_saved_data() -> Optional[dict]:
         return None
 
 
+# ============================ フル時刻表 & 履歴 ============================
+def full_slots_for(dated: list[dict], target: date) -> list[dict]:
+    """
+    指定放送日の【全枠】を返す（キャスター番組も深夜無人も含む、フル時刻表用）。
+
+    各枠: {time, program(番組名), caster(漢字名 or None)}
+    """
+    by_time = {}
+    for e in dated:
+        if e['bday'] != target:
+            continue
+        code = e.get('caster') or ''
+        name = resolve_caster_name(code)[0] if code else None
+        by_time[e['hour']] = {'time': e['hour'], 'program': e['title'], 'caster': name}
+    return sorted(by_time.values(), key=lambda p: slot_minutes(p['time']))
+
+
+def normalize_lineup(programs: list[dict]) -> list[dict]:
+    """
+    旧フォーマット（status無し）のラインナップを新フォーマットに正規化する。
+    初回デプロイ時、旧 `programs` を tweeted 基準として綺麗に引き継ぐため。
+    """
+    out = []
+    for p in programs or []:
+        caster = p.get('caster')
+        confirmed = bool(caster) and caster != '未定'
+        out.append({
+            'time': p['time'],
+            'caster': caster if confirmed else None,
+            'status': 'confirmed' if confirmed else 'undecided',
+            'program': p.get('program', ''),
+            'profile_url': p.get('profile_url', '') if confirmed else '',
+        })
+    return out
+
+
+def union_full(acc: list[dict], current: list[dict]) -> list[dict]:
+    """フル時刻表を蓄積する（同時刻は最新で上書き、過去観測の枠は保持）。"""
+    base = {p['time']: p for p in acc}
+    for p in current:
+        base[p['time']] = p
+    return sorted(base.values(), key=lambda p: slot_minutes(p['time']))
+
+
+def full_equal(a: list[dict], b: list[dict]) -> bool:
+    """2つのフル時刻表が同一か（時刻・番組・キャスター観点）。"""
+    def key(s):
+        return [(p['time'], p.get('program'), p.get('caster'))
+                for p in sorted(s, key=lambda p: slot_minutes(p['time']))]
+    return key(a) == key(b)
+
+
+def append_history(record: dict) -> None:
+    """history.jsonl に1行追記する（統計・長期記録用。失敗してもBot本体は止めない）。"""
+    try:
+        with open(HISTORY_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(record, ensure_ascii=False) + '\n')
+    except Exception as e:
+        log(f"履歴追記エラー: {e}")
+
+
+def history_tweet_record(target: date, event: str, lineup: list[dict]) -> dict:
+    """ツイート系履歴（告知/決定/変更）。lineup は {時刻: キャスター名 or null}。"""
+    return {
+        'ts': now_jst().isoformat(),
+        'date': target.isoformat(),
+        'event': event,
+        'lineup': {p['time']: (p['caster'] if (p.get('caster') and p['caster'] != '未定') else None)
+                   for p in sorted(lineup, key=lambda p: slot_minutes(p['time']))},
+    }
+
+
+def history_final_record(target: date, full: list[dict]) -> dict:
+    """日次確定履歴（放送日のフル時刻表＝過去の放送一覧の素）。"""
+    return {
+        'ts': now_jst().isoformat(),
+        'date': target.isoformat(),
+        'event': 'final',
+        'slots': [{'time': p['time'], 'program': p.get('program', ''), 'caster': p.get('caster')}
+                  for p in sorted(full, key=lambda p: slot_minutes(p['time']))],
+    }
+
+
 # ============================ reconcile（中核） ============================
 def reconcile() -> bool:
     """
-    1回分の照合処理。告知 / 決定・変更通知 / baseline更新 を状況に応じて行う。
+    1回分の照合処理。
+      - フル時刻表を蓄積（アーカイブ／final の素）
+      - 21時以降・翌日が未告知なら告知（その際、終わる放送日を final として確定）
+      - 追跡日の「未定→決定」「確定A→確定B」を検知して通知
+        （差分の基準は最後にツイートした状態 = tweeted）
 
     Returns:
         正常終了で True
@@ -475,74 +566,90 @@ def reconcile() -> bool:
     dated = assign_broadcast_dates(entries, now)
 
     saved = load_saved_data() or {}
+    # tweeted = 判断の基準。新フォーマットがあればそれ、無ければ旧 programs を正規化して引き継ぐ。
+    tweeted = saved.get('tweeted') or normalize_lineup(saved.get('programs', []))
+    full_acc = saved.get('full') or []
     announced_date = saved.get('announced_date')
-    baseline = saved.get('programs', [])
+    saved_target = saved.get('target_date')
 
     tb = today_bday(now)
     tomorrow = tb + timedelta(days=1)
     announce_now = (now.hour >= ANNOUNCE_HOUR) or (os.getenv('ANNOUNCE_TEST') == 'true')
 
-    # ---------- ① 告知（21時以降・未告知） ----------
+    # ---------- ① 告知（21時以降・翌日が未告知） ----------
     if announce_now and announced_date != tomorrow.isoformat():
-        raw_lineup = lineup_for(dated, tomorrow, pad_standard=False)
-        has_confirmed = any(p['status'] == 'confirmed' for p in raw_lineup)
-        if has_confirmed:
+        raw = lineup_for(dated, tomorrow, pad_standard=False)
+        if any(p['status'] == 'confirmed' for p in raw):
             lineup = lineup_for(dated, tomorrow, pad_standard=True)
             tweet = build_announce_tweet(tomorrow, lineup)
             log("=== 告知ツイート ===\n" + tweet)
             if is_dry_run():
                 log("dry-run: 告知投稿・保存スキップ")
                 return True
-            if post_to_twitter(tweet):
-                save_data(tomorrow, lineup, announced_date=tomorrow.isoformat())
-                return True
-            log("告知投稿に失敗。次回リトライ")
-            return False
+            if not post_to_twitter(tweet):
+                log("告知投稿に失敗。次回リトライ")
+                return False
+            # 終わる放送日を final として確定（最後の観測も取り込む）
+            if saved_target and saved_target != tomorrow.isoformat():
+                out_day = date.fromisoformat(saved_target)
+                final_full = union_full(full_acc, full_slots_for(dated, out_day))
+                if final_full:
+                    append_history(history_final_record(out_day, final_full))
+                    log(f"final 確定: {out_day} ({len(final_full)}枠)")
+            # 翌日へロール（tweeted/full をリセット）
+            save_data(tomorrow, lineup, full_slots_for(dated, tomorrow),
+                      announced_date=tomorrow.isoformat())
+            append_history(history_tweet_record(tomorrow, 'announce', lineup))
+            return True
         else:
-            log("翌日の確定キャスターがまだ無い。告知保留（次回tickで再試行）")
-            # 告知できないので監視へフォールスルー
+            log("翌日の確定キャスターがまだ無い。告知保留")
 
-    # ---------- ② 監視（決定 / 変更） ----------
-    saved_target = saved.get('target_date')
+    # ---------- 追跡日の決定 ----------
     if saved_target:
         tracked = date.fromisoformat(saved_target)
         if tracked < tb:
-            log(f"追跡日 {tracked} が古い → 今日 {tb} に再アンカー")
-            tracked = tb
+            log(f"追跡日 {tracked} が古い → 今日 {tb} に再アンカー（基準リセット）")
+            tracked, tweeted, full_acc = tb, [], []
     else:
         tracked = tb
 
+    # ---------- ② フル時刻表を蓄積（アーカイブ） ----------
+    new_full = union_full(full_acc, full_slots_for(dated, tracked))
+
+    # ---------- ③ 監視（決定 / 変更）：基準は tweeted ----------
     current = lineup_for(dated, tracked, pad_standard=False)
-    if not current:
-        log(f"追跡日 {tracked} のデータなし。状態維持")
-        return True
-
     upcoming = filter_upcoming(current, tracked, now)
-    decisions, changes = diff_lineup(baseline, upcoming)
+    decisions, changes = diff_lineup(tweeted, upcoming)
 
-    posted = True
+    new_tweeted = tweeted
     if decisions or changes:
         tweet = build_change_tweet(tracked, decisions, changes, now.strftime('%H:%M'))
-        log(f"=== 決定{len(decisions)}件 / 変更{len(changes)}件 ===\n" + tweet)
-        posted = True if is_dry_run() else post_to_twitter(tweet)
+        log(f"=== 決定{len(decisions)} / 変更{len(changes)} ===\n" + tweet)
+        if is_dry_run():
+            log("dry-run: 投稿・保存スキップ")
+            return True
+        if not post_to_twitter(tweet):
+            log("投稿失敗。状態更新せず（次回リトライ）")
+            return False
+        new_tweeted = merge_baseline(tweeted, upcoming)
+        ev = 'decision+change' if (decisions and changes) else ('change' if changes else 'decision')
+        append_history(history_tweet_record(tracked, ev, new_tweeted))
     else:
         log("決定・変更なし")
+        if is_dry_run():
+            log("dry-run: 保存スキップ")
+            return True
 
-    if is_dry_run():
-        log("dry-run: 保存スキップ")
-        return True
-    if not posted:
-        log("投稿失敗。baseline更新せず（次回リトライ）")
-        return False
-
-    # 状態が変わった時だけ保存（毎時commitのノイズを避ける）
-    merged = merge_baseline(baseline, current)
-    state_changed = (saved.get('target_date') != tracked.isoformat()
-                     or not programs_equal(baseline, merged))
+    # ---------- 保存（状態が変わった時だけ） ----------
+    state_changed = (
+        saved_target != tracked.isoformat()
+        or not programs_equal(tweeted, new_tweeted)
+        or not full_equal(full_acc, new_full)
+    )
     if state_changed:
-        save_data(tracked, merged, announced_date=announced_date)
+        save_data(tracked, new_tweeted, new_full, announced_date=announced_date)
     else:
-        log("状態変化なし → 保存スキップ（commitノイズ回避）")
+        log("状態変化なし → 保存スキップ")
     return True
 
 

@@ -53,9 +53,9 @@ jobs:
           TZ: 'Asia/Tokyo'
         run: python src/weather_bot.py
 
-      - name: Commit schedule state
+      - name: Commit schedule state & history
         if: success() && github.event.inputs.dry_run != 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'BOT: update schedule state'
-          file_pattern: schedule_data.json
+          file_pattern: schedule_data.json history.jsonl
