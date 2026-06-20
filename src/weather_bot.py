@@ -513,6 +513,19 @@ def full_equal(a: list[dict], b: list[dict]) -> bool:
     return key(a) == key(b)
 
 
+def ensure_history_file() -> None:
+    """history.jsonl が無ければ空で作る。
+    イベント（告知/決定/変更/final）の無い「確定だけ」のrunでは append_history が
+    呼ばれずファイルが生成されない。すると Actions の commit step（file_pattern に
+    history.jsonl を含む）が `pathspec did not match any files` で落ちる。これを防ぐ。
+    """
+    if not os.path.exists(HISTORY_FILE):
+        try:
+            open(HISTORY_FILE, 'a', encoding='utf-8').close()
+        except Exception as e:
+            log(f"履歴ファイル作成エラー: {e}")
+
+
 def append_history(record: dict) -> None:
     """history.jsonl に1行追記する（統計・長期記録用。失敗してもBot本体は止めない）。"""
     try:
@@ -656,6 +669,7 @@ def reconcile() -> bool:
 # ============================ エントリーポイント ============================
 def main() -> None:
     log("=== ウェザーニュースBot開始 ===")
+    ensure_history_file()   # イベント無しrunでも commit step が落ちないように先に確保
     success = reconcile()
     try:
         with open('bot_result.json', 'w', encoding='utf-8') as f:
