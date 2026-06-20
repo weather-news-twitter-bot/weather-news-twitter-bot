@@ -1,61 +1,65 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ウェザーニュース番組表取得＆Twitter投稿ボット
+ウェザーニュース番組表Bot（reconcile方式 / 毎時1回実行）
 
-機能:
-    - ウェザーニュースLiVEの番組表を公開JSON APIから取得
-    - 担当キャスター情報をTwitterに投稿
-    - 番組表の変更を検出して更新通知
+1回の実行（GitHub Actions・毎時）で、状況に応じて次を行う:
+  - 確定:  追跡中の放送日のラインナップを取得し、保存(baseline)を更新
+  - 告知:  21時以降・未告知なら、翌日のラインナップをツイート（未定枠は「未定」表示）
+  - 決定:  未定だった枠にキャスターが付いたらツイート
+  - 変更:  確定キャスターが別の確定キャスターに変わったらツイート
+
+「今日/明日」の取り違え防止は3層:
+  1. now基準の放送日付与（05:00開始の放送日で各枠を区切る）
+  2. git保存の target_date（＝今追っている放送日のアンカー）
+  3. 番組名による判別（'・'付き=キャスター番組 / generic "ウェザーニュースLiVE"=深夜無人）
 
 データ源:
-    - 番組表: https://site.weathernews.jp/site/live/json/timetable.json
-      （サイトのVue.jsが描画に使う真のデータ源。caster は識別コード）
-    - キャスターコード→漢字名: timetable.html の caster_trans()/caster_kanji()
-      を実行時に抽出（新キャスター追加にも追従。失敗時はハードコード辞書）
+  - 番組表JSON:  https://site.weathernews.jp/site/live/json/timetable.json
+  - コード→漢字名: timetable.html の caster_trans/caster_kanji を実行時抽出（失敗時は内蔵辞書）
 
-実行モード (EXECUTION_MODE):
-    - post:  番組表を取得してツイート投稿 (schedule-tweet.yml に指定の時刻)
-    - watch: 前回データと比較し、変更があれば更新通知 (hourly_checker.yml に指定の間隔)
-
-動作確認モード (SKIP_TWEET_FLAG=true):
-    - 全処理を実行するが、ツイート投稿とコミットをスキップ
+テスト用環境変数:
+  - SKIP_TWEET_FLAG=true : 投稿・保存をスキップ（dry-run）
+  - TEST_NOW=2026-06-20T21:30 : 現在時刻を上書き
+  - ANNOUNCE_TEST=true : 時刻に関係なく告知判定を走らせる
 """
 import os
-import json
-import sys
 import re
-import asyncio
+import sys
+import json
 import time
 import urllib.request
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, date, timezone, timedelta
 from typing import Optional
 
-# =============================================================================
-# 定数
-# =============================================================================
+# ============================ 定数 ============================
 JST = timezone(timedelta(hours=9))
-
-# 番組表の真のデータ源（サイトのVue.jsが描画に使う公開JSON）と、
-# キャスターコード→漢字名の対応表を持つHTMLページ。
 TIMETABLE_JSON_URL = "https://site.weathernews.jp/site/live/json/timetable.json"
 TIMETABLE_HTML_URL = "https://weathernews.jp/wnl/timetable.html"
 DATA_FILE = 'schedule_data.json'
 
-# 放送日は 05:00 を境界に区切られる（05:00開始が1日の始まり）。
-# 取得枠は固定しない（12:30 等の変則枠にも追従する）。標準枠はフォールバック生成にのみ使う。
-STANDARD_TIME_SLOTS = ['05:00', '08:00', '11:00', '14:00', '17:00', '20:00']
+# 翌日告知を出す時刻（JST）。この時刻以降の最初の実行で告知する。
+ANNOUNCE_HOUR = 21
+# 放送日の境界（05:00開始）
+DAY_START_HOUR = 5
 
-# 取得設定（JSON APIは安定しているのでリトライは控えめ）
 MAX_RETRIES = 5
 RETRY_DELAY_SEC = 15
 HTTP_TIMEOUT_SEC = 30
 USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/120.0 Safari/537.36')
 
-# キャスターコードの正規化表 / 漢字名表のフォールバック。
-# 通常はページJSから動的抽出するが、抽出失敗時はこのスナップショットを使う。
-# （出典: timetable.html の caster_trans() / caster_kanji()）
+# 標準枠（告知時に未定プレースホルダを埋めるため）
+STANDARD_SLOTS = {
+    '05:00': 'ウェザーニュースLiVE・モーニング',
+    '08:00': 'ウェザーニュースLiVE・サンシャイン',
+    '11:00': 'ウェザーニュースLiVE・コーヒータイム',
+    '14:00': 'ウェザーニュースLiVE・アフタヌーン',
+    '17:00': 'ウェザーニュースLiVE・イブニング',
+    '20:00': 'ウェザーニュースLiVE・ムーン',
+}
+
+# キャスターコード正規化 / 漢字名表のフォールバック（ページ抽出失敗時に使用）
 FALLBACK_CASTER_TRANS = {
     'ailin': 'yamagishi', 'hiyama2018': 'hiyama', 'izumin': 'maie',
     'komaki2018': 'komaki', 'matsu': 'matsuyuki', 'ohshima': 'oshima',
@@ -71,282 +75,56 @@ FALLBACK_CASTER_KANJI = {
     'aohara': '青原 桃香', 'okamoto': '岡本 結子 リサ', 'fukuyoshi': '福吉 貴文',
     'tanabe': '田辺 真南葉', 'matsumoto': '松本 真央',
 }
-
-# キャスター対応表のキャッシュ（プロセス内で1回だけ取得）
 _CASTER_MAPS = None
 
 
-# =============================================================================
-# メイン処理
-# =============================================================================
-async def main():
+# ============================ ユーティリティ ============================
+def log(message: str) -> None:
+    """タイムスタンプ付きでstderrにログ出力する。"""
+    print(f"[{now_jst().strftime('%H:%M:%S')}] {message}", file=sys.stderr)
+
+
+def now_jst() -> datetime:
     """
-    エントリーポイント。
-
-    2つの環境変数で動作を制御する:
-
-    軸1: 何をするか (EXECUTION_MODE)
-        - post:  番組表を取得してツイート投稿 (schedule-tweet.yml に指定の時刻)
-        - watch: 前回と比較し、変更があれば更新ツイート (hourly_checker.yml に指定の間隔)
-
-    軸2: 本当に投稿するか (SKIP_TWEET_FLAG)
-        - false または未設定: 本番モード（実際に投稿）
-        - true: 動作確認モード（投稿・コミットをスキップ）
-
-    Environment Variables:
-        EXECUTION_MODE: 'post'(デフォルト) or 'watch'
-        SKIP_TWEET_FLAG: 'true' で動作確認モード
-    """
-    log("=== ウェザーニュースボット開始 ===")
-    log(f"現在時刻: {now_jst().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    mode = os.getenv('EXECUTION_MODE', 'post').lower()
-    log(f"実行モード: {mode}")
-
-    if mode == 'watch':
-        success = await run_watch_mode()
-    else:
-        success = await run_post_mode()
-
-    # 結果ファイル出力
-    result = {
-        'success': success,
-        'mode': mode,
-        'timestamp': now_jst().isoformat()
-    }
-    with open('bot_result.json', 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
-
-    sys.exit(0 if success else 1)
-
-
-async def run_post_mode() -> bool:
-    """
-    投稿モード: 番組表を取得してツイート投稿。
-
-    処理フロー:
-        1. 対象日を決定
-        2. 番組表を取得
-        3. 対象日のデータを抽出
-        4. 有効なキャスターがいればツイート投稿
-        5. データを保存
-
-    Returns:
-        処理成功ならTrue
-    """
-    log("=== 投稿モード開始 ===")
-
-    # 1. 対象日を決定
-    target_date, target_date_str = get_target_date()
-
-    # 2. 取得
-    all_programs = await fetch_schedule()
-
-    # 3. 対象日のデータを抽出
-    programs = extract_target_day_programs(all_programs, target_date)
-
-    if not programs:
-        log("対象日のデータが取得できませんでした")
-        programs = create_fallback_schedule()
-
-    # ログ出力
-    log("=== 取得データ ===")
-    for p in programs:
-        log(f"  {p['time']} - {p['caster']}")
-
-    # 4. 有効なキャスターチェック
-    source = 'json_api' if has_valid_caster(programs) else 'fallback'
-
-    if not has_valid_caster(programs):
-        log("有効なキャスター情報なし。ツイートをスキップ")
-        save_data(programs, target_date_str, source)
-        return False
-
-    # 5. 放送済み除外 & ツイート生成
-    upcoming = filter_upcoming_programs(programs, target_date)
-    tweet_text = build_schedule_tweet(upcoming, target_date_str)
-
-    # 6. ツイート投稿
-    if is_dry_run():
-        log("動作確認モード: ツイート投稿をスキップ")
-        log("=== 生成されるツイート ===\n" + tweet_text)
-        save_data(programs, target_date_str, source)
-        return True
-
-    success = post_to_twitter(tweet_text)
-
-    # 7. データ保存
-    save_data(programs, target_date_str, source)
-
-    log(f"=== 投稿モード完了: {'成功' if success else '失敗'} ===")
-    return success
-
-
-async def run_watch_mode() -> bool:
-    """
-    監視モード: 前回データと比較し、変更があれば更新通知。
-
-    処理フロー:
-        1. 前回データを読み込み（なければ投稿モードへ）
-        2. 番組表を取得
-        3. 有効なキャスターチェック
-        4. 変更を検出
-        5. 変更があれば更新ツイート投稿
-        6. データを保存
-
-    Returns:
-        処理成功ならTrue
-    """
-    log("=== 監視モード開始 ===")
-
-    # 1. 前回データを読み込み
-    saved = load_saved_data()
-    if not saved:
-        log("前回データなし。投稿モードで実行")
-        return await run_post_mode()
-
-    target_date, _ = get_target_date()
-    target_date_str = saved.get('target_date_str', '日付不明')
-
-    # 2. 取得
-    all_programs = await fetch_schedule()
-    programs = extract_target_day_programs(all_programs, target_date)
-
-    if not programs:
-        log("データ取得失敗。スキップ")
-        return False
-
-    # 3. 有効なキャスターチェック
-    if not has_valid_caster(programs):
-        log("有効なキャスター情報なし。更新チェックをスキップ")
-        return False
-
-    # 4. 変更検出 & ツイート生成
-    tweet_text = build_change_tweet(
-        saved['programs'],
-        programs,
-        target_date,
-        target_date_str
-    )
-
-    if not tweet_text:
-        log("変更なし")
-        return True
-
-    log("変更を検出。更新ツイートを投稿")
-
-    # 5. ツイート投稿
-    if is_dry_run():
-        log("動作確認モード: ツイート投稿をスキップ")
-        log("=== 生成されるツイート ===\n" + tweet_text)
-        save_data(programs, target_date_str, 'json_api')
-        return True
-
-    if post_to_twitter(tweet_text):
-        save_data(programs, target_date_str, 'json_api')
-        log("=== 監視モード完了: 更新投稿成功 ===")
-        return True
-    else:
-        log("ツイート失敗。データは更新しない（次回リトライ）")
-        return False
-
-
-# =============================================================================
-# 1. 対象日の決定
-# =============================================================================
-def get_target_date() -> tuple[datetime, str]:
-    """
-    ツイート対象の日付を決定する。
-
-    決定ルール:
-        1. 環境変数 SCHEDULE_TARGET_DATE があればその日付
-        2. 環境変数 SCHEDULE_TARGET_MODE が 'today' or 'tomorrow' なら従う
-        3. 自動モード: 18時以降なら翌日、それ以外は今日
-
-    Returns:
-        (対象日のdatetime, 表示用文字列) のタプル
+    現在の日本時間を返す。TEST_NOW があればそれを使う（テスト用）。
 
     Examples:
-        >>> # 15:00に実行した場合
-        >>> date, date_str = get_target_date()
-        >>> print(date_str)
-        2025年01月15日
-
-        >>> # 19:00に実行した場合（自動で翌日）
-        >>> date, date_str = get_target_date()
-        >>> print(date_str)
-        2025年01月16日
-
-    Environment Variables:
-        SCHEDULE_TARGET_DATE: 直接日付指定 (例: '2025-01-15')
-        SCHEDULE_TARGET_MODE: 'today', 'tomorrow', 'auto'(デフォルト)
-        SCHEDULE_THRESHOLD_HOUR: 自動モードの閾値時刻 (デフォルト: 18)
+        >>> os.environ['TEST_NOW'] = '2026-06-20T21:30'
+        >>> now_jst().hour
+        21
     """
-    current = now_jst()
-
-    # 1. 直接日付指定
-    target_date_env = os.getenv('SCHEDULE_TARGET_DATE')
-    if target_date_env:
+    override = os.getenv('TEST_NOW')
+    if override:
         try:
-            target = datetime.strptime(target_date_env, '%Y-%m-%d').replace(tzinfo=JST)
-            target_str = target.strftime('%Y年%m月%d日')
-            log(f"環境変数で指定された日付を使用: {target_str}")
-            return target, target_str
+            dt = datetime.fromisoformat(override)
+            return dt.replace(tzinfo=JST) if dt.tzinfo is None else dt.astimezone(JST)
         except ValueError:
-            log(f"環境変数SCHEDULE_TARGET_DATEの形式が不正: {target_date_env}")
-
-    # 2. モード指定
-    mode = os.getenv('SCHEDULE_TARGET_MODE', 'auto').lower()
-    threshold_hour = int(os.getenv('SCHEDULE_THRESHOLD_HOUR', '18'))
-
-    if mode == 'tomorrow':
-        target = current + timedelta(days=1)
-    elif mode == 'today':
-        target = current
-    else:  # auto
-        target = current + timedelta(days=1) if current.hour >= threshold_hour else current
-
-    target_str = target.strftime('%Y年%m月%d日')
-    log(f"対象日: {target_str} (モード: {mode})")
-    return target, target_str
+            log(f"TEST_NOW の形式が不正: {override}")
+    return datetime.now(JST)
 
 
-def is_today(target_date: datetime) -> bool:
-    """
-    対象日が今日かどうかを判定する。
-
-    Args:
-        target_date: 判定する日付
-
-    Returns:
-        今日ならTrue
-
-    Examples:
-        >>> target, _ = get_target_date()
-        >>> if is_today(target):
-        ...     print("今日の番組表です")
-    """
-    return target_date.date() == now_jst().date()
+def is_dry_run() -> bool:
+    """動作確認モード（投稿・保存をスキップ）かどうか。"""
+    return os.getenv('SKIP_TWEET_FLAG') == 'true'
 
 
-# =============================================================================
-# 2. データ取得（JSON API）
-# =============================================================================
+def format_jp_date(d: date) -> str:
+    """date を「2026年06月21日」形式にする。"""
+    return f"{d.year}年{d.month:02d}月{d.day:02d}日"
+
+
+def slot_minutes(hhmm: str) -> int:
+    """'HH:MM' を 0時起点の分に変換する。"""
+    h, m = hhmm.split(':')
+    return int(h) * 60 + int(m)
+
+
+# ============================ HTTP / キャスター対応表 ============================
 def http_get(url: str, cache_bust: bool = True) -> str:
-    """
-    URLをGETして本文（テキスト）を返す。
-
-    Args:
-        url: 取得先URL
-        cache_bust: True ならCDNキャッシュ回避用のクエリを付与
-
-    Returns:
-        レスポンス本文（UTF-8デコード済み）
-    """
+    """URLをGETして本文(UTF-8)を返す。cache_bust=True でキャッシュ回避クエリを付与。"""
     if cache_bust:
         sep = '&' if '?' in url else '?'
         url = f"{url}{sep}tm={int(time.time() * 1000)}"
-
     req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SEC) as resp:
         return resp.read().decode('utf-8', errors='replace')
@@ -354,45 +132,25 @@ def http_get(url: str, cache_bust: bool = True) -> str:
 
 def parse_js_caster_map(html: str, func_name: str) -> dict:
     """
-    ページJS内の caster_trans() / caster_kanji() のような
+    ページJSの caster_trans()/caster_kanji() のような
     `if(x == "key"){ ret_name = "value"; }` 形式の対応表を抽出する。
-
-    Args:
-        html: timetable.html の本文
-        func_name: 'caster_trans' or 'caster_kanji'
-
-    Returns:
-        {key: value} の辞書（抽出できなければ空辞書）
-
-    Examples:
-        >>> trans = parse_js_caster_map(html, 'caster_trans')
-        >>> trans['matsumoto2025']
-        'matsumoto'
     """
     start = html.find(f'function {func_name}(')
     if start == -1:
         return {}
-
-    # 次の関数定義までを当該関数の本体とみなす
     end = html.find('function ', start + len(f'function {func_name}('))
     body = html[start:end] if end != -1 else html[start:start + 8000]
-
     pairs = re.findall(
         r'==\s*"([^"]+)"\s*\)\s*\{\s*ret_name\s*=\s*"([^"]+)"',
         body
     )
-    return {key: value for key, value in pairs}
+    return {k: v for k, v in pairs}
 
 
 def get_caster_maps() -> tuple[dict, dict]:
     """
     キャスターコード正規化表 / 漢字名表を取得する（プロセス内キャッシュ）。
-
-    まず timetable.html から動的抽出を試み、新キャスター追加にも追従する。
-    抽出に失敗した場合はハードコードのスナップショットにフォールバックする。
-
-    Returns:
-        (正規化表, 漢字名表) のタプル
+    まず timetable.html から動的抽出し、失敗時はフォールバック辞書を使う。
     """
     global _CASTER_MAPS
     if _CASTER_MAPS is not None:
@@ -407,7 +165,6 @@ def get_caster_maps() -> tuple[dict, dict]:
     except Exception as e:
         log(f"キャスター対応表の抽出に失敗: {e}")
 
-    # 漢字名表が取れなければフォールバック
     if not kanji_map:
         log("ページからの抽出に失敗 → ハードコード辞書を使用")
         trans_map = dict(FALLBACK_CASTER_TRANS)
@@ -419,433 +176,232 @@ def get_caster_maps() -> tuple[dict, dict]:
 
 def resolve_caster_name(code: str) -> tuple[str, str]:
     """
-    キャスターコードを漢字名とプロフィールURLに解決する。
-
-    サイトと同じ2段変換: caster_trans でコード正規化 → caster_kanji で漢字名。
-
-    Args:
-        code: JSONの caster フィールド（例: 'matsumoto2025'）
-
-    Returns:
-        (漢字名, プロフィールURL) のタプル。未知のコードは漢字名にコードを返す。
-
-    Examples:
-        >>> resolve_caster_name('matsumoto2025')
-        ('松本 真央', 'https://weathernews.jp/wnl/caster/matsumoto.html')
+    キャスターコードを (漢字名, プロフィールURL) に解決する。
+    サイトと同じ2段変換（caster_trans → caster_kanji）。未知コードは漢字名にコードを返す。
     """
     trans_map, kanji_map = get_caster_maps()
     normalized = trans_map.get(code, code)
     name = kanji_map.get(normalized)
     profile_url = f"https://weathernews.jp/wnl/caster/{normalized}.html"
-
     if not name:
         log(f"未知のキャスターコード: '{code}' (正規化: '{normalized}')")
-        name = normalized  # 暫定でローマ字表記を使う
-
+        name = normalized
     return name, profile_url
 
 
-async def fetch_schedule() -> list[dict]:
+# ============================ 取得 & 放送日付与 ============================
+def fetch_entries() -> Optional[list[dict]]:
     """
-    番組表データを取得する（JSON API、リトライ付き）。
-
-    最大MAX_RETRIES回リトライし、全滅時はフォールバックを返す。
+    JSON APIから生の番組表エントリ列を取得する（リトライ付き）。
 
     Returns:
-        番組データのリスト（フォールバック含め必ず返る）
-        各要素: {'time': '05:00', 'caster': '名前', 'program': '番組名', 'profile_url': 'URL'}
-
-    Examples:
-        >>> programs = await fetch_schedule()
-        >>> for p in programs:
-        ...     print(f"{p['time']} - {p['caster']}")
+        [{hour, title, caster}, ...]（時系列）。総失敗時は None。
     """
     for attempt in range(1, MAX_RETRIES + 1):
-        programs = fetch_from_json_api()
-        if programs:
-            return programs
+        try:
+            raw = http_get(TIMETABLE_JSON_URL)
+            entries = json.loads(raw)
+            if isinstance(entries, list) and entries:
+                log(f"JSON API: {len(entries)}エントリ取得")
+                return entries
+            log("JSON APIのデータが空")
+        except Exception as e:
+            log(f"JSON API取得エラー: {e}")
 
         if attempt < MAX_RETRIES:
-            log(f"取得失敗。{RETRY_DELAY_SEC}秒後にリトライ ({attempt}/{MAX_RETRIES})")
-            await asyncio.sleep(RETRY_DELAY_SEC)
-        else:
-            log("全リトライ失敗。フォールバックを使用")
+            log(f"{RETRY_DELAY_SEC}秒後にリトライ ({attempt}/{MAX_RETRIES})")
+            time.sleep(RETRY_DELAY_SEC)
 
-    return create_fallback_schedule()
+    return None
 
 
-def fetch_from_json_api() -> Optional[list[dict]]:
+def today_bday(now: datetime) -> date:
     """
-    公開JSON APIから番組表を取得して整形する。
-
-    - 取得枠は固定しない → 12:30 等の変則枠もそのまま通る
-    - キャスター不在枠（深夜の自動放送、caster が空）はスキップする
-
-    Returns:
-        番組データのリスト。失敗・データなしは None。
-        各要素: {'time': '05:00', 'caster': '魚住 茉由', 'program': '...', 'profile_url': '...'}
+    「今 進行中の放送日」を返す（放送日は 05:00 開始）。
+    05:00以降なら当日、05:00前なら前日。
 
     Examples:
-        >>> programs = fetch_from_json_api()
-        >>> if programs:
-        ...     print(f"{len(programs)}枠を取得")
+        >>> today_bday(datetime(2026,6,20,21,0,tzinfo=JST))
+        datetime.date(2026, 6, 20)
+        >>> today_bday(datetime(2026,6,21,2,0,tzinfo=JST))
+        datetime.date(2026, 6, 20)
     """
-    try:
-        raw = http_get(TIMETABLE_JSON_URL)
-        entries = json.loads(raw)
-    except Exception as e:
-        log(f"JSON API取得エラー: {e}")
-        return None
+    return now.date() if now.hour >= DAY_START_HOUR else now.date() - timedelta(days=1)
 
-    if not isinstance(entries, list) or not entries:
-        log("JSON APIのデータが空")
-        return None
 
-    programs = []
-    for entry in entries:
-        hour = (entry.get('hour') or '').strip()
-        code = (entry.get('caster') or '').strip()
-        title = (entry.get('title') or '').strip()
+def assign_broadcast_dates(entries: list[dict], now: datetime) -> list[dict]:
+    """
+    時系列エントリ列の各枠に「放送日(bday)」を付与する。
 
-        # 時刻形式（HH:MM）でなければスキップ
+    放送日は 05:00 区切り。先頭(進行中の放送日)を today_bday とし、
+    リスト中で 05:00 を跨ぐ度に翌放送日へ繰り上げる。キャスター枠(05:00〜20:00)は
+    同一放送日内に収まるので、これで各枠の表示日付が一意に定まる。
+
+    Returns:
+        [{hour, title, caster, bday(date)}, ...]
+    """
+    out = []
+    cur = today_bday(now)
+    for e in entries:
+        hour = (e.get('hour') or '').strip()
         if not re.match(r'^\d{2}:\d{2}$', hour):
             continue
-
-        # キャスター不在枠（深夜の自動放送）はスキップ
-        if not code:
-            continue
-
-        name, profile_url = resolve_caster_name(code)
-        programs.append({
-            'time': hour,
-            'caster': name,
-            'program': title,
-            'profile_url': profile_url
+        if hour == '05:00':
+            # 05:00 を跨ぐ度に翌放送日へ（先頭=進行中の放送日からの最初の05:00を含む）
+            cur = cur + timedelta(days=1)
+        out.append({
+            'hour': hour,
+            'title': (e.get('title') or '').strip(),
+            'caster': (e.get('caster') or '').strip(),
+            'bday': cur,
         })
-
-    if not programs:
-        log("有効なキャスター枠が取得できず")
-        return None
-
-    log(f"JSON API: {len(programs)}枠を取得")
-    return programs
+    return out
 
 
-def create_fallback_schedule() -> list[dict]:
+def is_caster_program(title: str) -> bool:
     """
-    取得失敗時のフォールバック用スケジュールを生成する。
-
-    標準枠を全て「未定」で返す。これにより has_valid_caster() が
-    Falseを返し、ツイートはスキップされる（誤投稿防止）。
-
-    Returns:
-        全枠「未定」の番組データリスト
-
-    Examples:
-        >>> fallback = create_fallback_schedule()
-        >>> print(fallback[0]['caster'])
-        未定
+    キャスターが付く番組か（'・'付きの番組名）。
+    深夜の無人枠は generic "ウェザーニュースLiVE"（'・'なし）なので除外できる。
     """
-    log("フォールバック: 全枠「未定」のスケジュールを生成")
-
-    program_names = {
-        '05:00': 'ウェザーニュースLiVE・モーニング',
-        '08:00': 'ウェザーニュースLiVE・サンシャイン',
-        '11:00': 'ウェザーニュースLiVE・コーヒータイム',
-        '14:00': 'ウェザーニュースLiVE・アフタヌーン',
-        '17:00': 'ウェザーニュースLiVE・イブニング',
-        '20:00': 'ウェザーニュースLiVE・ムーン'
-    }
-
-    return [
-        {'time': t, 'caster': '未定', 'program': program_names[t], 'profile_url': ''}
-        for t in STANDARD_TIME_SLOTS
-    ]
+    return '・' in title
 
 
-# =============================================================================
-# 3. データ加工
-# =============================================================================
-def extract_target_day_programs(all_programs: list[dict], target_date: datetime) -> list[dict]:
+def lineup_for(dated: list[dict], target: date, pad_standard: bool) -> list[dict]:
     """
-    取得した全データから対象日の番組データのみを抽出する。
+    指定放送日のラインナップを組む。
 
-    サイトは「現在放送中～未来」の枠を時系列で表示する。
-    05:00を1日の境界として、今日/明日のデータを判別する。
+    各枠: {time, caster(確定時は漢字名/未定はNone), status('confirmed'|'undecided'),
+           program, profile_url}
 
     Args:
-        all_programs: 取得した全番組データ（時系列順）
-        target_date: 抽出したい日付
+        pad_standard: True なら標準6枠に満たない分を「未定」で埋める（告知用）
 
     Returns:
-        対象日の番組データリスト（枠数は固定しない）
-
-    Examples:
-        >>> # 18時以降に実行（今日の残り + 明日の全枠が並ぶ）
-        >>> all_data = await fetch_schedule()
-        >>> target, _ = get_target_date()  # 翌日が対象
-        >>> tomorrow_programs = extract_target_day_programs(all_data, target)
+        時刻順のラインナップ
     """
-    if not all_programs:
-        return []
-
-    # 最初の 05:00 を境界として分割
-    split_index = -1
-    for i, program in enumerate(all_programs):
-        if program['time'] == '05:00':
-            split_index = i
-            break
-
-    if split_index == -1:
-        # 05:00が見つからない場合は全データを返す
-        day1_programs = all_programs
-        day2_programs = []
-    else:
-        day1_programs = all_programs[:split_index]  # 05:00より前（今日の残り）
-        day2_programs = all_programs[split_index:]  # 05:00以降（翌日 or 今日の全体）
-
-    log(f"データ分割: Day1={len(day1_programs)}枠, Day2={len(day2_programs)}枠")
-
-    # 対象日に応じて選択
-    is_tomorrow = (target_date.date() - now_jst().date()).days >= 1
-
-    if is_tomorrow:
-        selected = day2_programs
-        log("翌日が対象 → Day2を選択")
-        # 翌々日（次の05:00以降）が混ざらないよう1放送日分に絞る
-        for j in range(1, len(selected)):
-            if selected[j]['time'] == '05:00':
-                log(f"翌々日分を除外: {len(selected) - j}枠")
-                selected = selected[:j]
-                break
-    else:
-        selected = day1_programs if day1_programs else day2_programs
-        log(f"今日が対象 → {'Day1' if day1_programs else 'Day2(補完)'}を選択")
-
-    return selected
-
-
-# =============================================================================
-# 4. キャスター検証
-# =============================================================================
-def has_valid_caster(programs: list[dict]) -> bool:
-    """
-    有効なキャスター情報が1人以上いるか判定する。
-
-    「未定」以外で、2文字以上、日本語を含む名前を有効とする。
-
-    Args:
-        programs: 番組データのリスト
-
-    Returns:
-        有効なキャスターがいればTrue
-
-    Examples:
-        >>> programs = [{'time': '05:00', 'caster': '山岸愛梨', ...}]
-        >>> has_valid_caster(programs)
-        True
-
-        >>> programs = [{'time': '05:00', 'caster': '未定', ...}]
-        >>> has_valid_caster(programs)
-        False
-    """
-    for p in programs:
-        caster = p.get('caster', '')
-        if (caster and
-            caster != '未定' and
-            len(caster) >= 2 and
-            re.search(r'[ぁ-んァ-ヶ一-龯]', caster)):
-            return True
-    return False
-
-
-# =============================================================================
-# 5. 放送済み枠の除外
-# =============================================================================
-def filter_upcoming_programs(programs: list[dict], target_date: datetime) -> list[dict]:
-    """
-    放送済みの枠を除外し、これから放送する枠のみを返す。
-
-    対象日が今日の場合のみフィルタリングを行う。
-    翌日の番組表の場合は全枠を返す。
-
-    Args:
-        programs: 番組データのリスト
-        target_date: 対象日
-
-    Returns:
-        これから放送する枠のみのリスト
-
-    Examples:
-        >>> # 14:30に実行した場合
-        >>> upcoming = filter_upcoming_programs(programs, target_date)
-        >>> # 05:00, 08:00, 11:00, 14:00 の枠は除外され、
-        >>> # 17:00, 20:00 の枠のみ返る
-    """
-    if not is_today(target_date):
-        return programs
-
-    current = now_jst()
-    upcoming = []
-
-    for program in programs:
-        try:
-            program_time = datetime.strptime(
-                f"{target_date.strftime('%Y-%m-%d')} {program['time']}",
-                '%Y-%m-%d %H:%M'
-            ).replace(tzinfo=JST)
-
-            if program_time >= current:
-                upcoming.append(program)
-            else:
-                log(f"放送済み枠を除外: {program['time']}")
-        except ValueError:
+    by_time = {}
+    for e in dated:
+        if e['bday'] != target:
             continue
+        if not is_caster_program(e['title']):
+            continue  # 深夜無人枠はスキップ
+        t = e['hour']
+        if e['caster']:
+            name, url = resolve_caster_name(e['caster'])
+            by_time[t] = {'time': t, 'caster': name, 'status': 'confirmed',
+                          'program': e['title'], 'profile_url': url}
+        else:
+            by_time.setdefault(t, {'time': t, 'caster': None, 'status': 'undecided',
+                                   'program': e['title'], 'profile_url': ''})
 
-    return upcoming
+    if pad_standard:
+        for t, prog in STANDARD_SLOTS.items():
+            by_time.setdefault(t, {'time': t, 'caster': None, 'status': 'undecided',
+                                   'program': prog, 'profile_url': ''})
+
+    return sorted(by_time.values(), key=lambda p: slot_minutes(p['time']))
 
 
-# =============================================================================
-# 6. ツイート生成
-# =============================================================================
-def build_schedule_tweet(programs: list[dict], target_date_str: str) -> str:
+def filter_upcoming(programs: list[dict], target: date, now: datetime) -> list[dict]:
     """
-    番組表ツイートを生成する。
+    放送済み枠を除外する（追跡日が今日の場合のみ）。翌日分は全て返す。
+    """
+    if target != today_bday(now):
+        return programs
+    out = []
+    for p in programs:
+        slot_dt = datetime.combine(target, datetime.min.time(), JST) + timedelta(minutes=slot_minutes(p['time']))
+        if slot_dt >= now:
+            out.append(p)
+    return out
 
-    Args:
-        programs: 番組データのリスト（放送済み除外済み）
-        target_date_str: 表示用日付文字列
+
+# ============================ 差分検出 ============================
+def diff_lineup(baseline: list[dict], current_upcoming: list[dict]) -> tuple[list, list]:
+    """
+    保存baseline と 現在の未放送枠 を突き合わせ、決定/変更を抽出する。
+
+    判定（現在が確定キャスターの枠のみ対象）:
+        - 前回 未定/無 → 今回 確定 = 決定
+        - 前回 確定A   → 今回 確定B = 変更
+        - 同じ                     = 何もしない
 
     Returns:
-        ツイート本文
-
-    Examples:
-        >>> tweet = build_schedule_tweet(programs, '2025年01月15日')
-        >>> print(tweet)
-        📺 2025年01月15日 WNL番組表
-
-        05:00- 山岸愛梨
-        08:00- 檜山沙耶
-        ...
-
-        #ウェザーニュース #番組表
+        (decisions, changes)
+        decisions: [(time, new_name), ...]
+        changes:   [(time, old_name, new_name), ...]
     """
-    lines = [f"📺 {target_date_str} WNL番組表", ""]
+    base = {p['time']: p for p in baseline}
+    decisions, changes = [], []
+    for p in current_upcoming:
+        if p['status'] != 'confirmed':
+            continue
+        t = p['time']
+        prev = base.get(t)
+        # baseline側は status に頼らず caster 値で「確定済みか」を判定
+        # （旧フォーマット=status無し、との後方互換のため）
+        prev_name = None
+        if prev:
+            pc = prev.get('caster')
+            if pc and pc != '未定':
+                prev_name = pc
+        if prev_name is None:
+            decisions.append((t, p['caster']))     # 未定/無 → 確定 = 決定
+        elif prev_name != p['caster']:
+            changes.append((t, prev_name, p['caster']))  # 確定A → 確定B = 変更
+    return decisions, changes
 
-    for program in programs:
-        caster = program['caster'].replace(' ', '')
-        lines.append(f"{program['time']}- {caster}")
 
-    lines.extend(["", "#ウェザーニュース #番組表"])
+def merge_baseline(baseline: list[dict], current: list[dict]) -> list[dict]:
+    """
+    baseline を現在の枠で更新する（同時刻は上書き、放送済みで消えた枠は前回値を保持）。
+    """
+    base = {p['time']: p for p in baseline}
+    for p in current:
+        base[p['time']] = p
+    return sorted(base.values(), key=lambda p: slot_minutes(p['time']))
+
+
+def programs_equal(a: list[dict], b: list[dict]) -> bool:
+    """2つのラインナップが（時刻・キャスター・状態の観点で）同一かどうか。"""
+    def key(progs):
+        return [(p['time'], p.get('caster'), p.get('status'))
+                for p in sorted(progs, key=lambda p: slot_minutes(p['time']))]
+    return key(a) == key(b)
+
+
+# ============================ ツイート生成 ============================
+def build_announce_tweet(target: date, lineup: list[dict]) -> str:
+    """翌日告知ツイートを生成する。未定枠は「未定」と表示。"""
+    lines = [f"📺 {format_jp_date(target)} WNL番組表", ""]
+    for p in lineup:
+        name = p['caster'].replace(' ', '') if p['status'] == 'confirmed' else '未定'
+        lines.append(f"{p['time']}- {name}")
+    lines += ["", "#ウェザーニュース #番組表"]
     return "\n".join(lines)
 
 
-def build_change_tweet(
-    previous: list[dict],
-    current: list[dict],
-    target_date: datetime,
-    target_date_str: str
-) -> Optional[str]:
-    """
-    キャスター変更があった場合の更新通知ツイートを生成する。
+def build_change_tweet(target: date, decisions: list, changes: list, detect_time: str) -> str:
+    """決定/変更の通知ツイートを生成する（変化した枠のみ）。"""
+    items = []
+    for t, new in decisions:
+        items.append((t, f"{t}- {new.replace(' ', '')} (未定から決定:{detect_time})"))
+    for t, old, new in changes:
+        items.append((t, f"{t}- {new.replace(' ', '')} ({old.replace(' ', '')}から変更:{detect_time})"))
+    items.sort(key=lambda x: slot_minutes(x[0]))
 
-    変更がない場合はNoneを返す。
-
-    通知判定ロジック:
-        | 前回         | 今回         | 通知     |
-        |--------------|--------------|----------|
-        | 山岸愛梨     | 角田奈緒子   | する     |
-        | 山岸愛梨     | 未定         | しない   |
-        | 山岸愛梨     | None         | しない   |
-        | 未定         | 角田奈緒子   | する     |
-        | 未定         | 未定         | しない   |
-        | None         | 角田奈緒子   | する     |
-        | None         | 未定         | しない   |
-        | 山岸愛梨     | 山岸愛梨     | しない   |
-
-        ※ 今回が確定キャスターで、前回と違う場合のみ通知
-
-    Args:
-        previous: 前回の番組データ
-        current: 今回の番組データ
-        target_date: 対象日
-        target_date_str: 表示用日付文字列
-
-    Returns:
-        変更があればツイート本文、なければNone
-
-    Examples:
-        >>> tweet = build_change_tweet(prev, curr, target, '2025年01月15日')
-        >>> if tweet:
-        ...     print("変更あり！")
-        ...     post_to_twitter(tweet)
-    """
-    prev_map = {p['time']: p['caster'] for p in previous}
-    detect_time = now_jst().strftime('%H:%M')
-
-    lines = []
-    changes_count = 0
-
-    # これから放送する枠のみ対象
-    upcoming = filter_upcoming_programs(current, target_date)
-
-    for program in upcoming:
-        time_str = program['time']
-        curr_caster = program['caster']
-        prev_caster = prev_map.get(time_str)
-
-        # 通知判定
-        # 今回: データ取得失敗 or 未定 → 通知しない
-        if curr_caster is None or curr_caster == '未定':
-            is_notify = False
-        # 前回と同じ → 通知しない
-        elif prev_caster == curr_caster:
-            is_notify = False
-        # 今回確定で前回と違う → 通知する
-        else:
-            is_notify = True
-
-        if is_notify:
-            lines.append(f"{time_str}- {curr_caster} ({prev_caster}から変更:{detect_time})")
-            changes_count += 1
-            log(f"変更検出: {time_str} {prev_caster} → {curr_caster}")
-        else:
-            lines.append(f"{time_str}- {curr_caster}")
-
-    if changes_count == 0:
-        return None
-
-    header = f"📢 【番組表変更のお知らせ】\n\n📺 {target_date_str} WNL番組表(更新)\n\n"
-    footer = "\n\n#ウェザーニュース #番組表"
-    return header + "\n".join(lines) + footer
+    header = "📢 【番組表変更のお知らせ】\n\n"
+    body = [f"📺 {format_jp_date(target)} WNL番組表(更新)", ""]
+    body += [line for _, line in items]
+    body += ["", "#ウェザーニュース #番組表"]
+    return header + "\n".join(body)
 
 
-# =============================================================================
-# 7. Twitter投稿
-# =============================================================================
+# ============================ Twitter投稿 ============================
 def post_to_twitter(tweet_text: str) -> bool:
-    """
-    Twitterにツイートを投稿する。
-
-    環境変数からAPIキーを取得して認証する。
-
-    Args:
-        tweet_text: 投稿する本文
-
-    Returns:
-        投稿成功ならTrue
-
-    Examples:
-        >>> if post_to_twitter("テスト投稿"):
-        ...     print("投稿成功！")
-
-    Environment Variables:
-        TWITTER_API_KEY, TWITTER_API_SECRET,
-        TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
-    """
+    """ツイートを投稿する。環境変数のAPIキーで認証。成功でTrue。"""
     try:
         import tweepy
-
         client = tweepy.Client(
             consumer_key=os.getenv('TWITTER_API_KEY'),
             consumer_secret=os.getenv('TWITTER_API_SECRET'),
@@ -853,131 +409,155 @@ def post_to_twitter(tweet_text: str) -> bool:
             access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
             wait_on_rate_limit=True
         )
-
         response = client.create_tweet(text=tweet_text)
         if response.data:
-            tweet_id = response.data['id']
-            log(f"ツイート成功: https://twitter.com/i/web/status/{tweet_id}")
+            log(f"ツイート成功: https://twitter.com/i/web/status/{response.data['id']}")
             return True
-
     except Exception as e:
         log(f"ツイートエラー: {e}")
         if hasattr(e, 'response') and e.response is not None:
             log(f"詳細: {e.response.text}")
-
     return False
 
 
-def is_dry_run() -> bool:
+# ============================ 永続化 ============================
+def save_data(target: date, programs: list[dict], announced_date: Optional[str]) -> None:
     """
-    動作確認モードかどうかを判定する。
-
-    動作確認モードでは全処理を実行するが、
-    実際のツイート投稿だけをスキップする。
-
-    Returns:
-        動作確認モードならTrue
-
-    Examples:
-        >>> if is_dry_run():
-        ...     print("動作確認モード: ツイートをスキップ")
-
-    Environment Variables:
-        SKIP_TWEET_FLAG: 'true' で動作確認モード
-    """
-    return os.getenv('SKIP_TWEET_FLAG') == 'true'
-
-
-# =============================================================================
-# 8. データ永続化
-# =============================================================================
-def save_data(programs: list[dict], target_date_str: str, source: str) -> None:
-    """
-    番組データをファイルに保存する。
+    追跡状態を保存する。
 
     Args:
-        programs: 番組データのリスト
-        target_date_str: 対象日の表示文字列
-        source: データソース ('json_api' or 'fallback')
-
-    Examples:
-        >>> save_data(programs, '2025年01月15日', 'json_api')
+        target: 追跡中の放送日
+        programs: その日の baseline ラインナップ
+        announced_date: 最後に告知した放送日(ISO) ※idempotency用
     """
     data = {
+        'target_date': target.isoformat(),
+        'target_date_str': format_jp_date(target),
+        'announced_date': announced_date,
         'programs': programs,
-        'target_date_str': target_date_str,
-        'source': source,
-        'timestamp': now_jst().isoformat()
+        'timestamp': now_jst().isoformat(),
     }
-
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        log("データを保存")
+        log(f"保存: target={target.isoformat()} / {len(programs)}枠 / announced={announced_date}")
     except Exception as e:
-        log(f"データ保存エラー: {e}")
+        log(f"保存エラー: {e}")
 
 
 def load_saved_data() -> Optional[dict]:
-    """
-    保存済みの番組データを読み込む。
-
-    Returns:
-        保存済みデータ。ファイルがない場合はNone。
-
-    Examples:
-        >>> saved = load_saved_data()
-        >>> if saved:
-        ...     print(f"前回の対象日: {saved['target_date_str']}")
-    """
+    """保存済みの追跡状態を読み込む。無ければ None。"""
     if not os.path.exists(DATA_FILE):
         return None
-
     try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            log("保存済みデータを読み込み")
-            return data
+            return json.load(f)
     except Exception as e:
-        log(f"データ読み込みエラー: {e}")
+        log(f"読み込みエラー: {e}")
         return None
 
 
-# =============================================================================
-# 9. ユーティリティ
-# =============================================================================
-def log(message: str) -> None:
+# ============================ reconcile（中核） ============================
+def reconcile() -> bool:
     """
-    タイムスタンプ付きでログを出力する。
-
-    Args:
-        message: 出力するメッセージ
-
-    Examples:
-        >>> log("処理を開始します")
-        [14:30:45] 処理を開始します
-    """
-    now = datetime.now(JST)
-    print(f"[{now.strftime('%H:%M:%S')}] {message}", file=sys.stderr)
-
-
-def now_jst() -> datetime:
-    """
-    現在の日本時間を取得する。
+    1回分の照合処理。告知 / 決定・変更通知 / baseline更新 を状況に応じて行う。
 
     Returns:
-        日本時間のdatetimeオブジェクト
-
-    Examples:
-        >>> current = now_jst()
-        >>> print(current.strftime('%Y-%m-%d %H:%M'))
-        2025-01-15 14:30
+        正常終了で True
     """
-    return datetime.now(JST)
+    now = now_jst()
+    log(f"=== reconcile 開始 {now.strftime('%Y-%m-%d %H:%M')} ===")
+
+    entries = fetch_entries()
+    if not entries:
+        log("番組表が取得できず。処理中断")
+        return False
+    dated = assign_broadcast_dates(entries, now)
+
+    saved = load_saved_data() or {}
+    announced_date = saved.get('announced_date')
+    baseline = saved.get('programs', [])
+
+    tb = today_bday(now)
+    tomorrow = tb + timedelta(days=1)
+    announce_now = (now.hour >= ANNOUNCE_HOUR) or (os.getenv('ANNOUNCE_TEST') == 'true')
+
+    # ---------- ① 告知（21時以降・未告知） ----------
+    if announce_now and announced_date != tomorrow.isoformat():
+        raw_lineup = lineup_for(dated, tomorrow, pad_standard=False)
+        has_confirmed = any(p['status'] == 'confirmed' for p in raw_lineup)
+        if has_confirmed:
+            lineup = lineup_for(dated, tomorrow, pad_standard=True)
+            tweet = build_announce_tweet(tomorrow, lineup)
+            log("=== 告知ツイート ===\n" + tweet)
+            if is_dry_run():
+                log("dry-run: 告知投稿・保存スキップ")
+                return True
+            if post_to_twitter(tweet):
+                save_data(tomorrow, lineup, announced_date=tomorrow.isoformat())
+                return True
+            log("告知投稿に失敗。次回リトライ")
+            return False
+        else:
+            log("翌日の確定キャスターがまだ無い。告知保留（次回tickで再試行）")
+            # 告知できないので監視へフォールスルー
+
+    # ---------- ② 監視（決定 / 変更） ----------
+    saved_target = saved.get('target_date')
+    if saved_target:
+        tracked = date.fromisoformat(saved_target)
+        if tracked < tb:
+            log(f"追跡日 {tracked} が古い → 今日 {tb} に再アンカー")
+            tracked = tb
+    else:
+        tracked = tb
+
+    current = lineup_for(dated, tracked, pad_standard=False)
+    if not current:
+        log(f"追跡日 {tracked} のデータなし。状態維持")
+        return True
+
+    upcoming = filter_upcoming(current, tracked, now)
+    decisions, changes = diff_lineup(baseline, upcoming)
+
+    posted = True
+    if decisions or changes:
+        tweet = build_change_tweet(tracked, decisions, changes, now.strftime('%H:%M'))
+        log(f"=== 決定{len(decisions)}件 / 変更{len(changes)}件 ===\n" + tweet)
+        posted = True if is_dry_run() else post_to_twitter(tweet)
+    else:
+        log("決定・変更なし")
+
+    if is_dry_run():
+        log("dry-run: 保存スキップ")
+        return True
+    if not posted:
+        log("投稿失敗。baseline更新せず（次回リトライ）")
+        return False
+
+    # 状態が変わった時だけ保存（毎時commitのノイズを避ける）
+    merged = merge_baseline(baseline, current)
+    state_changed = (saved.get('target_date') != tracked.isoformat()
+                     or not programs_equal(baseline, merged))
+    if state_changed:
+        save_data(tracked, merged, announced_date=announced_date)
+    else:
+        log("状態変化なし → 保存スキップ（commitノイズ回避）")
+    return True
 
 
-# =============================================================================
-# エントリーポイント
-# =============================================================================
+# ============================ エントリーポイント ============================
+def main() -> None:
+    log("=== ウェザーニュースBot開始 ===")
+    success = reconcile()
+    try:
+        with open('bot_result.json', 'w', encoding='utf-8') as f:
+            json.dump({'success': success, 'timestamp': now_jst().isoformat()},
+                      f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log(f"結果出力エラー: {e}")
+    sys.exit(0 if success else 1)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
