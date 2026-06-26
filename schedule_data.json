@@ -2,7 +2,72 @@
   "target_date": "2026-06-26",
   "target_date_str": "2026年06月26日",
   "announced_date": "2026-06-25",
-  "tweeted": [],
-  "full": [],
-  "timestamp": "2026-06-26T06:03:29.844037+09:00"
+  "tweeted": [
+    {
+      "time": "11:00",
+      "caster": "江川 清音",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・コーヒータイム",
+      "profile_url": "https://weathernews.jp/wnl/caster/egawa.html"
+    },
+    {
+      "time": "14:00",
+      "caster": "青原 桃香",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・アフタヌーン",
+      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+    },
+    {
+      "time": "17:00",
+      "caster": "小川 千奈",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・イブニング",
+      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
+    },
+    {
+      "time": "20:00",
+      "caster": "小林 李衣奈",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・ムーン",
+      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+    }
+  ],
+  "full": [
+    {
+      "time": "00:00",
+      "program": "ウェザーニュースLiVE",
+      "caster": null
+    },
+    {
+      "time": "08:00",
+      "program": "ウェザーニュースLiVE・サンシャイン",
+      "caster": "魚住 茉由"
+    },
+    {
+      "time": "11:00",
+      "program": "ウェザーニュースLiVE・コーヒータイム",
+      "caster": "江川 清音"
+    },
+    {
+      "time": "14:00",
+      "program": "ウェザーニュースLiVE・アフタヌーン",
+      "caster": "青原 桃香"
+    },
+    {
+      "time": "17:00",
+      "program": "ウェザーニュースLiVE・イブニング",
+      "caster": "小川 千奈"
+    },
+    {
+      "time": "20:00",
+      "program": "ウェザーニュースLiVE・ムーン",
+      "caster": "小林 李衣奈"
+    },
+    {
+      "time": "23:00",
+      "program": "ウェザーニュースLiVE",
+      "caster": null
+    }
+  ],
+  "timestamp": "2026-06-26T10:31:30.695288+09:00"
 }
