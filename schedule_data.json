@@ -1,7 +1,7 @@
 {
-  "target_date": "2026-06-27",
-  "target_date_str": "2026年06月27日",
-  "announced_date": "2026-06-27",
+  "target_date": "2026-06-28",
+  "target_date_str": "2026年06月28日",
+  "announced_date": "2026-06-28",
   "tweeted": [
     {
       "time": "05:00",
@@ -19,24 +19,17 @@
     },
     {
       "time": "11:00",
-      "caster": "松本 真央",
+      "caster": "田辺 真南葉",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
-    },
-    {
-      "time": "12:30",
-      "caster": "小林 李衣奈",
-      "status": "confirmed",
-      "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
     },
     {
       "time": "14:00",
-      "caster": "小林 李衣奈",
+      "caster": "青原 桃香",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
     },
     {
       "time": "17:00",
@@ -55,11 +48,6 @@
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
       "caster": "魚住 茉由"
@@ -72,17 +60,12 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "松本 真央"
-    },
-    {
-      "time": "12:30",
-      "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "小林 李衣奈"
+      "caster": "田辺 真南葉"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小林 李衣奈"
+      "caster": "青原 桃香"
     },
     {
       "time": "17:00",
@@ -100,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-06-27T01:29:36.966268+09:00"
+  "timestamp": "2026-06-27T21:44:26.077363+09:00"
 }
