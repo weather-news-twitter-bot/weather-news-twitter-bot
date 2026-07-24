@@ -1,7 +1,7 @@
 {
-  "target_date": "2026-07-24",
-  "target_date_str": "2026年07月24日",
-  "announced_date": "2026-07-24",
+  "target_date": "2026-07-25",
+  "target_date_str": "2026年07月25日",
+  "announced_date": "2026-07-25",
   "tweeted": [
     {
       "time": "05:00",
@@ -12,24 +12,24 @@
     },
     {
       "time": "08:00",
-      "caster": "松本 真央",
+      "caster": "田辺 真南葉",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
     },
     {
       "time": "11:00",
-      "caster": "青原 桃香",
+      "caster": "魚住 茉由",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
     },
     {
       "time": "14:00",
-      "caster": "小林 李衣奈",
+      "caster": "青原 桃香",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
     },
     {
       "time": "17:00",
@@ -48,11 +48,6 @@
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
       "caster": "岡本 結子 リサ"
@@ -60,17 +55,17 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "松本 真央"
+      "caster": "田辺 真南葉"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "青原 桃香"
+      "caster": "魚住 茉由"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小林 李衣奈"
+      "caster": "青原 桃香"
     },
     {
       "time": "17:00",
@@ -88,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-07-24T01:48:28.395868+09:00"
+  "timestamp": "2026-07-24T23:14:49.047757+09:00"
 }
