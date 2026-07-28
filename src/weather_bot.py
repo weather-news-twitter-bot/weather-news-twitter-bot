@@ -587,7 +587,12 @@ def reconcile() -> bool:
 
     tb = today_bday(now)
     tomorrow = tb + timedelta(days=1)
-    announce_now = (now.hour >= ANNOUNCE_HOUR) or (os.getenv('ANNOUNCE_TEST') == 'true')
+    # 告知窓 = 「21時 〜 翌05:00直前」（＝放送日の夜〜未明。today_bday/tomorrow は
+    # 未明でも据え置きなので day を跨いでも同じ翌日を指す）。cron が 21〜23時台を
+    # 取りこぼしても、日を跨いだ未明(0〜4時)の tick で告知を拾える。
+    # 既に告知済みなら announced_date==tomorrow で弾かれる（idempotent・二重告知なし）。
+    announce_now = (now.hour >= ANNOUNCE_HOUR) or (now.hour < DAY_START_HOUR) \
+        or (os.getenv('ANNOUNCE_TEST') == 'true')
 
     # ---------- ① 告知（21時以降・翌日が未告知） ----------
     if announce_now and announced_date != tomorrow.isoformat():
@@ -618,11 +623,13 @@ def reconcile() -> bool:
             log("翌日の確定キャスターがまだ無い。告知保留")
 
     # ---------- 追跡日の決定 ----------
+    reanchored = False
     if saved_target:
         tracked = date.fromisoformat(saved_target)
         if tracked < tb:
             log(f"追跡日 {tracked} が古い → 今日 {tb} に再アンカー（基準リセット）")
             tracked, tweeted, full_acc = tb, [], []
+            reanchored = True
     else:
         tracked = tb
 
@@ -636,17 +643,27 @@ def reconcile() -> bool:
 
     new_tweeted = tweeted
     if decisions or changes:
-        tweet = build_change_tweet(tracked, decisions, changes, now.strftime('%H:%M'))
-        log(f"=== 決定{len(decisions)} / 変更{len(changes)} ===\n" + tweet)
-        if is_dry_run():
-            log("dry-run: 投稿・保存スキップ")
-            return True
-        if not post_to_twitter(tweet):
-            log("投稿失敗。状態更新せず（次回リトライ）")
-            return False
-        new_tweeted = merge_baseline(tweeted, upcoming)
-        ev = 'decision+change' if (decisions and changes) else ('change' if changes else 'decision')
-        append_history(history_tweet_record(tracked, ev, new_tweeted))
+        if reanchored:
+            # 告知を挟まず放送日が変わった（cron が 21時〜翌未明を全て取りこぼした等）。
+            # tweeted が空リセットされているため、全枠が「未定から決定」に化けて
+            # 誤解を招く通知になる。ここでは通知せず baseline だけ静かに確立する。
+            log(f"再アンカー直後につき通知抑止（{len(decisions)}決定/{len(changes)}変更を baseline 化）")
+            if is_dry_run():
+                log("dry-run: baseline確立スキップ")
+                return True
+            new_tweeted = merge_baseline(tweeted, upcoming)
+        else:
+            tweet = build_change_tweet(tracked, decisions, changes, now.strftime('%H:%M'))
+            log(f"=== 決定{len(decisions)} / 変更{len(changes)} ===\n" + tweet)
+            if is_dry_run():
+                log("dry-run: 投稿・保存スキップ")
+                return True
+            if not post_to_twitter(tweet):
+                log("投稿失敗。状態更新せず（次回リトライ）")
+                return False
+            new_tweeted = merge_baseline(tweeted, upcoming)
+            ev = 'decision+change' if (decisions and changes) else ('change' if changes else 'decision')
+            append_history(history_tweet_record(tracked, ev, new_tweeted))
     else:
         log("決定・変更なし")
         if is_dry_run():
