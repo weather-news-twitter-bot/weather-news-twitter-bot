@@ -38,6 +38,9 @@ TIMETABLE_JSON_URL = "https://site.weathernews.jp/site/live/json/timetable.json"
 TIMETABLE_HTML_URL = "https://weathernews.jp/wnl/timetable.html"
 # 配信アーカイブ一覧（WNLは番組枠ごとに1本の配信を立て、終了後にタイトルへ番組名とキャスター名が入る）
 YOUTUBE_STREAMS_URL = "https://www.youtube.com/@weathernews/streams"
+# 放送中の配信。一覧は終わった枠しか載らないが、こちらは放送中に取れる。
+# 動画IDは終了後のアーカイブと同じなので、放送中に押さえておけば取りこぼさない。
+YOUTUBE_LIVE_URL = "https://www.youtube.com/@weathernews/live"
 DATA_FILE = 'schedule_data.json'
 HISTORY_FILE = 'history.jsonl'   # 統計・長期記録用の追記専用ログ（判断には不使用）
 
@@ -465,17 +468,43 @@ def load_saved_data() -> Optional[dict]:
 
 
 # ============================ YouTubeアーカイブ ============================
+def fetch_live_stream() -> Optional[tuple[str, str]]:
+    """
+    いま放送中の配信の (動画ID, タイトル) を取る。無ければ None。
+
+    放送中のタイトルにも日付・番組名・キャスター名が入る
+    （例: 〈ウェザーニュースLiVEモーニング・田辺真南葉／山口剛央〉）ので、
+    枠が終わるのを待たずにその場でリンクを確定できる。
+    """
+    try:
+        html = http_get(YOUTUBE_LIVE_URL, cache_bust=False)
+        vid = re.search(
+            r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"',
+            html)
+        title = re.search(r'<title>(.*?)</title>', html, re.S)
+        if vid and title:
+            return vid.group(1), title.group(1)
+    except Exception as e:
+        log(f"放送中の配信の取得に失敗（一覧のみで続行）: {e}")
+    return None
+
+
 def fetch_youtube_archives() -> list[tuple[str, str]]:
     """
-    ウェザーニュース公式チャンネルの配信一覧から (動画ID, タイトル) を取る。
+    ウェザーニュース公式チャンネルの配信から (動画ID, タイトル) を取る。
 
-    一覧に残るのは直近3日程度なので、毎時の実行で終わった枠から順に拾う前提。
+    放送中の1本を先頭に置き、続けて配信一覧（直近3日程度）を並べる。
+    一覧は終わった枠しか載らないので、放送中の枠は前者でしか拾えない。
     取得・解析に失敗しても Bot 本体は止めない（空リストを返してリンク無しで続行）。
     """
     global _YOUTUBE_ARCHIVES
     if _YOUTUBE_ARCHIVES is not None:
         return _YOUTUBE_ARCHIVES
     _YOUTUBE_ARCHIVES = []
+    live = fetch_live_stream()
+    if live:
+        _YOUTUBE_ARCHIVES.append(live)
+        log(f"放送中の配信: {live[0]}")
     try:
         html = http_get(YOUTUBE_STREAMS_URL, cache_bust=False)
         # ページ内のJSONは \uXXXX でエスケープされているので先に戻す
@@ -493,7 +522,7 @@ def fetch_youtube_archives() -> list[tuple[str, str]]:
                 continue
             seen.add(pair[1])
             _YOUTUBE_ARCHIVES.append(pair)
-        log(f"YouTube配信一覧: {len(_YOUTUBE_ARCHIVES)}件")
+        log(f"YouTube配信: {len(_YOUTUBE_ARCHIVES)}件（放送中含む）")
     except Exception as e:
         log(f"YouTube配信一覧の取得に失敗（リンク無しで続行）: {e}")
     return _YOUTUBE_ARCHIVES
