@@ -36,6 +36,8 @@ from typing import Optional
 JST = timezone(timedelta(hours=9))
 TIMETABLE_JSON_URL = "https://site.weathernews.jp/site/live/json/timetable.json"
 TIMETABLE_HTML_URL = "https://weathernews.jp/wnl/timetable.html"
+# 配信アーカイブ一覧（WNLは番組枠ごとに1本の配信を立て、終了後にタイトルへ番組名とキャスター名が入る）
+YOUTUBE_STREAMS_URL = "https://www.youtube.com/@weathernews/streams"
 DATA_FILE = 'schedule_data.json'
 HISTORY_FILE = 'history.jsonl'   # 統計・長期記録用の追記専用ログ（判断には不使用）
 
@@ -77,6 +79,7 @@ FALLBACK_CASTER_KANJI = {
     'tanabe': '田辺 真南葉', 'matsumoto': '松本 真央',
 }
 _CASTER_MAPS = None
+_YOUTUBE_ARCHIVES = None   # 1回の実行につき1度だけ取得（None=未取得）
 
 
 # ============================ ユーティリティ ============================
@@ -461,6 +464,93 @@ def load_saved_data() -> Optional[dict]:
         return None
 
 
+# ============================ YouTubeアーカイブ ============================
+def fetch_youtube_archives() -> list[tuple[str, str]]:
+    """
+    ウェザーニュース公式チャンネルの配信一覧から (動画ID, タイトル) を取る。
+
+    一覧に残るのは直近3日程度なので、毎時の実行で終わった枠から順に拾う前提。
+    取得・解析に失敗しても Bot 本体は止めない（空リストを返してリンク無しで続行）。
+    """
+    global _YOUTUBE_ARCHIVES
+    if _YOUTUBE_ARCHIVES is not None:
+        return _YOUTUBE_ARCHIVES
+    _YOUTUBE_ARCHIVES = []
+    try:
+        html = http_get(YOUTUBE_STREAMS_URL, cache_bust=False)
+        # ページ内のJSONは \uXXXX でエスケープされているので先に戻す
+        html = re.sub(r'\\u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), html)
+        # 動画IDとタイトルは別ノードにあるため、タイトル直前のIDを対応付ける
+        ids = [(m.start(), m.group(1))
+               for m in re.finditer(r'"(?:videoId|contentId)":"([A-Za-z0-9_-]{11})"', html)]
+        seen = set()
+        for m in re.finditer(r'"(?:content|simpleText|text)":"(【[^"]{10,220})"', html):
+            before = [v for pos, v in ids if pos < m.start()]
+            if not before:
+                continue
+            pair = (before[-1], m.group(1))
+            if pair[1] in seen:
+                continue
+            seen.add(pair[1])
+            _YOUTUBE_ARCHIVES.append(pair)
+        log(f"YouTube配信一覧: {len(_YOUTUBE_ARCHIVES)}件")
+    except Exception as e:
+        log(f"YouTube配信一覧の取得に失敗（リンク無しで続行）: {e}")
+    return _YOUTUBE_ARCHIVES
+
+
+def _squash(s: str) -> str:
+    """全角/半角スペースを除去する（タイトルは詰め書き、キャスター名は空白入りのため）。"""
+    return s.replace(' ', '').replace('　', '')
+
+
+def match_archive(archives: list[tuple[str, str]], bday: date,
+                  program: str, caster: str) -> Optional[str]:
+    """
+    放送日・番組名・キャスター名がすべて一致する配信を探し、動画IDを返す。
+
+    タイトル例:
+      【ライブ配信終了】最新天気ニュース・地震情報 2026年7月30日(木)／…
+      〈ウェザーニュースLiVEコーヒータイム・白井ゆかり／山口剛央〉
+    """
+    suffix = program.split('・')[-1].strip() if '・' in program else ''
+    if not suffix or not caster:
+        return None
+    jp_date = f"{bday.year}年{bday.month}月{bday.day}日"   # タイトル側はゼロ埋めしない
+    name = _squash(caster)
+    for vid, title in archives:
+        t = _squash(title)
+        if jp_date in t and 'ウェザーニュースLiVE' in t and suffix in t and name in t:
+            return vid
+    return None
+
+
+def resolve_youtube_links(full: list[dict], target: date) -> list[dict]:
+    """
+    フル時刻表の未解決枠に配信アーカイブのURLを埋める（キャスター番組のみ）。
+
+    深夜の無人枠はタイトルにキャスター名が無く誤対応しうるので対象外。
+    見つからなければ何もしない（次の実行で再挑戦する）。
+    """
+    pending = [p for p in full
+               if p.get('caster') and is_caster_program(p.get('program', '')) and not p.get('youtube')]
+    if not pending:
+        return full
+    archives = fetch_youtube_archives()
+    if not archives:
+        return full
+    # リンクは付加情報。ここで転んでも告知・変更通知は止めない。
+    try:
+        for p in pending:
+            vid = match_archive(archives, target, p.get('program', ''), p['caster'])
+            if vid:
+                p['youtube'] = f"https://youtu.be/{vid}"
+                log(f"配信リンク: {target} {p['time']} {p['caster']} -> {p['youtube']}")
+    except Exception as e:
+        log(f"配信リンクの照合に失敗（リンク無しで続行）: {e}")
+    return full
+
+
 # ============================ フル時刻表 & 履歴 ============================
 def full_slots_for(dated: list[dict], target: date) -> list[dict]:
     """
@@ -498,17 +588,27 @@ def normalize_lineup(programs: list[dict]) -> list[dict]:
 
 
 def union_full(acc: list[dict], current: list[dict]) -> list[dict]:
-    """フル時刻表を蓄積する（同時刻は最新で上書き、過去観測の枠は保持）。"""
+    """
+    フル時刻表を蓄積する（同時刻は最新で上書き、過去観測の枠は保持）。
+
+    解決済みの配信リンクは引き継ぐ。ただしキャスターが差し替わった枠は
+    リンクも別物になるので捨てる（次の実行で新しい枠として引き直す）。
+    """
     base = {p['time']: p for p in acc}
     for p in current:
-        base[p['time']] = p
+        prev = base.get(p['time'], {})
+        merged = dict(p)
+        if (not merged.get('youtube') and prev.get('youtube')
+                and prev.get('caster') == merged.get('caster')):
+            merged['youtube'] = prev['youtube']
+        base[p['time']] = merged
     return sorted(base.values(), key=lambda p: slot_minutes(p['time']))
 
 
 def full_equal(a: list[dict], b: list[dict]) -> bool:
-    """2つのフル時刻表が同一か（時刻・番組・キャスター観点）。"""
+    """2つのフル時刻表が同一か（時刻・番組・キャスター・配信リンク観点）。"""
     def key(s):
-        return [(p['time'], p.get('program'), p.get('caster'))
+        return [(p['time'], p.get('program'), p.get('caster'), p.get('youtube'))
                 for p in sorted(s, key=lambda p: slot_minutes(p['time']))]
     return key(a) == key(b)
 
@@ -552,7 +652,8 @@ def history_final_record(target: date, full: list[dict]) -> dict:
         'ts': now_jst().isoformat(),
         'date': target.isoformat(),
         'event': 'final',
-        'slots': [{'time': p['time'], 'program': p.get('program', ''), 'caster': p.get('caster')}
+        'slots': [{'time': p['time'], 'program': p.get('program', ''), 'caster': p.get('caster'),
+                   'youtube': p.get('youtube')}
                   for p in sorted(full, key=lambda p: slot_minutes(p['time']))],
     }
 
@@ -611,6 +712,7 @@ def reconcile() -> bool:
             if saved_target and saved_target != tomorrow.isoformat():
                 out_day = date.fromisoformat(saved_target)
                 final_full = union_full(full_acc, full_slots_for(dated, out_day))
+                final_full = resolve_youtube_links(final_full, out_day)
                 if final_full:
                     append_history(history_final_record(out_day, final_full))
                     log(f"final 確定: {out_day} ({len(final_full)}枠)")
@@ -635,6 +737,8 @@ def reconcile() -> bool:
 
     # ---------- ② フル時刻表を蓄積（アーカイブ） ----------
     new_full = union_full(full_acc, full_slots_for(dated, tracked))
+    # 終わった枠から順に配信リンクを埋める（未解決分は次の実行で再挑戦）
+    new_full = resolve_youtube_links(new_full, tracked)
 
     # ---------- ③ 監視（決定 / 変更）：基準は tweeted ----------
     current = lineup_for(dated, tracked, pad_standard=False)
