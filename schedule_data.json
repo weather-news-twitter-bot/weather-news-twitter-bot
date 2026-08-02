@@ -55,7 +55,8 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "福吉 貴文"
+      "caster": "福吉 貴文",
+      "youtube": "https://youtu.be/3iniDjzN-oM"
     },
     {
       "time": "08:00",
@@ -88,5 +89,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-03T00:28:55.199464+09:00"
+  "timestamp": "2026-08-03T04:36:11.769586+09:00"
 }
