@@ -66,7 +66,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "魚住 茉由"
+      "caster": "魚住 茉由",
+      "youtube": "https://youtu.be/RHO0WMTyj0U"
     },
     {
       "time": "14:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-06T08:18:26.273267+09:00"
+  "timestamp": "2026-08-06T12:41:39.793410+09:00"
 }
