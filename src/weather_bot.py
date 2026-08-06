@@ -347,11 +347,7 @@ def diff_lineup(baseline: list[dict], current_upcoming: list[dict]) -> tuple[lis
         prev = base.get(t)
         # baseline側は status に頼らず caster 値で「確定済みか」を判定
         # （旧フォーマット=status無し、との後方互換のため）
-        prev_name = None
-        if prev:
-            pc = prev.get('caster')
-            if pc and pc != '未定':
-                prev_name = pc
+        prev_name = prev.get('caster') if is_confirmed(prev) else None
         if prev_name is None:
             decisions.append((t, p['caster']))     # 未定/無 → 確定 = 決定
         elif prev_name != p['caster']:
@@ -359,12 +355,26 @@ def diff_lineup(baseline: list[dict], current_upcoming: list[dict]) -> tuple[lis
     return decisions, changes
 
 
+def is_confirmed(p: Optional[dict]) -> bool:
+    """その枠に確定キャスターが入っているか（旧フォーマット＝status無しにも耐える）。"""
+    if not p:
+        return False
+    caster = p.get('caster')
+    return bool(caster) and caster != '未定'
+
+
 def merge_baseline(baseline: list[dict], current: list[dict]) -> list[dict]:
     """
     baseline を現在の枠で更新する（同時刻は上書き、放送済みで消えた枠は前回値を保持）。
+
+    ただし「確定 → 未定」への引き下げはしない。baseline は"フォロワーが信じてる状態"
+    であって、未定に戻ったとは告知していないため。JSONのcasterが一時的に空になっても
+    直前に告知した名前を保ち、別の人に決まった時点で「○○から変更」として通知する。
     """
     base = {p['time']: p for p in baseline}
     for p in current:
+        if is_confirmed(base.get(p['time'])) and not is_confirmed(p):
+            continue
         base[p['time']] = p
     return sorted(base.values(), key=lambda p: slot_minutes(p['time']))
 
@@ -378,30 +388,90 @@ def programs_equal(a: list[dict], b: list[dict]) -> bool:
 
 
 # ============================ ツイート生成 ============================
+# Xの文字数勘定。280が上限で、日本語や絵文字は1文字を2つぶんとして数える。
+# 1つぶんで数える範囲は twitter-text の設定に合わせてある。
+TWEET_MAX_WEIGHTED = 280
+_WEIGHT_ONE_RANGES = ((0x0000, 0x10FF), (0x2000, 0x200D), (0x2010, 0x201F), (0x2032, 0x2037))
+
+
+def weighted_len(text: str) -> int:
+    """Xの数え方での文字数を返す。"""
+    total = 0
+    for ch in text:
+        cp = ord(ch)
+        total += 1 if any(lo <= cp <= hi for lo, hi in _WEIGHT_ONE_RANGES) else 2
+    return total
+
+
 def build_announce_tweet(target: date, lineup: list[dict]) -> str:
     """翌日告知ツイートを生成する。未定枠は「未定」と表示。"""
     lines = [f"📺 {format_jp_date(target)} WNL番組表", ""]
     for p in lineup:
-        name = p['caster'].replace(' ', '') if p['status'] == 'confirmed' else '未定'
-        lines.append(f"{p['time']}- {name}")
+        lines.append(f"{p['time']}- {slot_name(p)}")
     lines += ["", "#ウェザーニュース #番組表"]
     return "\n".join(lines)
 
 
-def build_change_tweet(target: date, decisions: list, changes: list, detect_time: str) -> str:
-    """決定/変更の通知ツイートを生成する（変化した枠のみ）。"""
-    items = []
-    for t, new in decisions:
-        items.append((t, f"{t}- {new.replace(' ', '')} (未定から決定:{detect_time})"))
-    for t, old, new in changes:
-        items.append((t, f"{t}- {new.replace(' ', '')} ({old.replace(' ', '')}から変更:{detect_time})"))
-    items.sort(key=lambda x: slot_minutes(x[0]))
+def slot_name(p: dict) -> str:
+    """枠の表示名（確定なら空白を詰めた氏名、そうでなければ「未定」）。"""
+    return p['caster'].replace(' ', '') if is_confirmed(p) else '未定'
 
-    header = "📢 【番組表変更のお知らせ】\n\n"
-    body = [f"📺 {format_jp_date(target)} WNL番組表(更新)", ""]
+
+def build_change_tweet(target: date, lineup: list[dict], decisions: list,
+                       changes: list, detect_time: str) -> tuple[str, bool]:
+    """
+    決定/変更の通知ツイートを生成する。
+
+    その日1日の枠を全部載せ、変わった枠にだけ注記を付ける。こうすると通知そのものが
+    フル時刻表として読める＝固定ポストに差し替えても訪問者から時刻表が消えない。
+
+    枠数や氏名の長さで文字数上限を超えうるので、収まるまで注記を削る:
+        full  … (○○から変更:14:30)
+        short … (○○から変更)
+        mark  … 🆕 だけ付ける
+    それでも収まらない時だけ、変わった枠のみの旧形式に落とす。
+
+    Returns:
+        (ツイート本文, 1日分が載っているか)
+        後者が False の通知は固定ポストにしない（時刻表として不完全なため）。
+    """
+    dec = {t for t, _ in decisions}
+    chg = {t: old for t, old, _ in changes}
+
+    def note(t: str, level: str) -> str:
+        if t not in dec and t not in chg:
+            return ''
+        if level == 'mark':
+            return ' 🆕'
+        suffix = '' if level == 'short' else f':{detect_time}'
+        if t in dec:
+            return f" (未定から決定{suffix})"
+        return f" ({chg[t].replace(' ', '')}から変更{suffix})"
+
+    def render(level: str) -> str:
+        lines = ["📢 【番組表変更のお知らせ】", "",
+                 f"📺 {format_jp_date(target)} WNL番組表(更新)", ""]
+        for p in lineup:
+            lines.append(f"{p['time']}- {slot_name(p)}{note(p['time'], level)}")
+        lines += ["", "#ウェザーニュース #番組表"]
+        return "\n".join(lines)
+
+    for level in ('full', 'short', 'mark'):
+        text = render(level)
+        if weighted_len(text) <= TWEET_MAX_WEIGHTED:
+            return text, True
+
+    # 枠が異常に多い日の保険。変わった枠だけを並べる（＝固定はしない）。
+    items = [(t, f"{t}- {new.replace(' ', '')} (未定から決定:{detect_time})")
+             for t, new in decisions]
+    items += [(t, f"{t}- {new.replace(' ', '')} ({old.replace(' ', '')}から変更:{detect_time})")
+              for t, old, new in changes]
+    items.sort(key=lambda x: slot_minutes(x[0]))
+    body = ["📢 【番組表変更のお知らせ】", "",
+            f"📺 {format_jp_date(target)} WNL番組表(更新)", ""]
     body += [line for _, line in items]
     body += ["", "#ウェザーニュース #番組表"]
-    return header + "\n".join(body)
+    return "\n".join(body), False
 
 
 # ============================ Twitter投稿 ============================
@@ -769,9 +839,7 @@ def reconcile() -> bool:
             if not tweet_id:
                 log("告知投稿に失敗。次回リトライ")
                 return False
-            # プロフィールの固定ポストを今日の番組表に差し替える。
-            # 変更ツイートは固定しない（変わった枠しか載っておらず、
-            # 固定を奪うと訪問者からフル時刻表が見えなくなるため）。
+            # プロフィールの固定ポストを最新の番組表に差し替える
             pin_tweet(tweet_id)
             # 終わる放送日を final として確定（最後の観測も取り込む）
             if saved_target and saved_target != tomorrow.isoformat():
@@ -822,15 +890,23 @@ def reconcile() -> bool:
                 return True
             new_tweeted = merge_baseline(tweeted, upcoming)
         else:
-            tweet = build_change_tweet(tracked, decisions, changes, now.strftime('%H:%M'))
+            # 通知は「その日1日ぶん」を載せる＝更新後の baseline がそのまま本文になる
+            new_tweeted = merge_baseline(tweeted, upcoming)
+            tweet, is_full = build_change_tweet(tracked, new_tweeted, decisions, changes,
+                                                now.strftime('%H:%M'))
             log(f"=== 決定{len(decisions)} / 変更{len(changes)} ===\n" + tweet)
             if is_dry_run():
                 log("dry-run: 投稿・保存スキップ")
                 return True
-            if not post_to_twitter(tweet):
+            tweet_id = post_to_twitter(tweet)
+            if not tweet_id:
                 log("投稿失敗。状態更新せず（次回リトライ）")
                 return False
-            new_tweeted = merge_baseline(tweeted, upcoming)
+            # 1日ぶん載っている通知だけ固定ポストに差し替える（時刻表として完全なので）
+            if is_full:
+                pin_tweet(tweet_id)
+            else:
+                log("変わった枠のみの通知のため固定ポストは差し替えない")
             ev = 'decision+change' if (decisions and changes) else ('change' if changes else 'decision')
             append_history(history_tweet_record(tracked, ev, new_tweeted))
     else:
