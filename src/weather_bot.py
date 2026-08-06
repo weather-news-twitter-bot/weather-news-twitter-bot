@@ -405,8 +405,8 @@ def build_change_tweet(target: date, decisions: list, changes: list, detect_time
 
 
 # ============================ Twitter投稿 ============================
-def post_to_twitter(tweet_text: str) -> bool:
-    """ツイートを投稿する。環境変数のAPIキーで認証。成功でTrue。"""
+def post_to_twitter(tweet_text: str) -> Optional[str]:
+    """ツイートを投稿する。環境変数のAPIキーで認証。成功でツイートID、失敗でNone。"""
     try:
         import tweepy
         client = tweepy.Client(
@@ -418,12 +418,43 @@ def post_to_twitter(tweet_text: str) -> bool:
         )
         response = client.create_tweet(text=tweet_text)
         if response.data:
-            log(f"ツイート成功: https://twitter.com/i/web/status/{response.data['id']}")
-            return True
+            tweet_id = str(response.data['id'])
+            log(f"ツイート成功: https://twitter.com/i/web/status/{tweet_id}")
+            return tweet_id
     except Exception as e:
         log(f"ツイートエラー: {e}")
         if hasattr(e, 'response') and e.response is not None:
             log(f"詳細: {e.response.text}")
+    return None
+
+
+def pin_tweet(tweet_id: str) -> bool:
+    """
+    ツイートをプロフィールの固定ポストにする。
+
+    公式APIに「投稿を固定する」口は無い（v2で固定できるのはリストだけ）ので、
+    ドキュメントに載っていない v1.1 の account/pin_tweet を使う。
+    2026-08-06 に無料枠で通ることを実機で確認済み。ただし未文書なので予告なく
+    消える可能性がある＝失敗しても告知そのものは成功扱いにする（付加情報）。
+
+    固定できる投稿は1件だけなので、新しく固定すれば前日ぶんは自動で外れる。
+    """
+    try:
+        from requests_oauthlib import OAuth1Session
+        session = OAuth1Session(
+            client_key=os.getenv('TWITTER_API_KEY'),
+            client_secret=os.getenv('TWITTER_API_SECRET'),
+            resource_owner_key=os.getenv('TWITTER_ACCESS_TOKEN'),
+            resource_owner_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
+        )
+        resp = session.post('https://api.twitter.com/1.1/account/pin_tweet.json',
+                            data={'id': tweet_id}, timeout=30)
+        if resp.status_code == 200:
+            log(f"固定ポストに設定: {tweet_id}")
+            return True
+        log(f"固定ポスト設定に失敗 (status={resp.status_code}): {resp.text[:300]}")
+    except Exception as e:
+        log(f"固定ポスト設定エラー: {e}")
     return False
 
 
@@ -734,9 +765,14 @@ def reconcile() -> bool:
             if is_dry_run():
                 log("dry-run: 告知投稿・保存スキップ")
                 return True
-            if not post_to_twitter(tweet):
+            tweet_id = post_to_twitter(tweet)
+            if not tweet_id:
                 log("告知投稿に失敗。次回リトライ")
                 return False
+            # プロフィールの固定ポストを今日の番組表に差し替える。
+            # 変更ツイートは固定しない（変わった枠しか載っておらず、
+            # 固定を奪うと訪問者からフル時刻表が見えなくなるため）。
+            pin_tweet(tweet_id)
             # 終わる放送日を final として確定（最後の観測も取り込む）
             if saved_target and saved_target != tomorrow.isoformat():
                 out_day = date.fromisoformat(saved_target)
