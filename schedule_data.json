@@ -18,6 +18,13 @@
       "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
     },
     {
+      "time": "09:30",
+      "caster": "江川 清音",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・サンシャイン",
+      "profile_url": "https://weathernews.jp/wnl/caster/egawa.html"
+    },
+    {
       "time": "11:00",
       "caster": "江川 清音",
       "status": "confirmed",
@@ -55,12 +62,20 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "松本 真央"
+      "caster": "松本 真央",
+      "youtube": "https://youtu.be/E5tHF9umfJw"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "岡本 結子 リサ"
+      "caster": "松本 真央",
+      "youtube": "https://youtu.be/y9J8bJwbp4U"
+    },
+    {
+      "time": "09:30",
+      "program": "ウェザーニュースLiVE・サンシャイン",
+      "caster": "江川 清音",
+      "youtube": "https://youtu.be/y9J8bJwbp4U"
     },
     {
       "time": "11:00",
@@ -88,5 +103,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-07T00:29:41.531339+09:00"
+  "timestamp": "2026-08-07T09:17:02.214402+09:00"
 }
