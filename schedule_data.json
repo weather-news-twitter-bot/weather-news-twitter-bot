@@ -1,14 +1,14 @@
 {
-  "target_date": "2026-08-09",
-  "target_date_str": "2026年08月09日",
-  "announced_date": "2026-08-09",
+  "target_date": "2026-08-10",
+  "target_date_str": "2026年08月10日",
+  "announced_date": "2026-08-10",
   "tweeted": [
     {
       "time": "05:00",
-      "caster": "魚住 茉由",
+      "caster": "福吉 貴文",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
     },
     {
       "time": "08:00",
@@ -19,74 +19,63 @@
     },
     {
       "time": "11:00",
-      "caster": "青原 桃香",
+      "caster": "小林 李衣奈",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
     },
     {
       "time": "14:00",
-      "caster": "小川 千奈",
-      "status": "confirmed",
-      "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
-    },
-    {
-      "time": "17:00",
       "caster": "戸北 美月",
       "status": "confirmed",
-      "program": "ウェザーニュースLiVE・イブニング",
+      "program": "ウェザーニュースLiVE・アフタヌーン",
       "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     },
     {
-      "time": "20:00",
+      "time": "17:00",
       "caster": "駒木 結衣",
       "status": "confirmed",
-      "program": "ウェザーニュースLiVE・ムーン",
+      "program": "ウェザーニュースLiVE・イブニング",
       "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+    },
+    {
+      "time": "20:00",
+      "caster": "山岸 愛梨",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・ムーン",
+      "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
     }
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "魚住 茉由",
-      "youtube": "https://youtu.be/Olg4zgkHKcA"
+      "caster": "福吉 貴文"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "岡本 結子 リサ",
-      "youtube": "https://youtu.be/KREiZS6q5ns"
+      "caster": "岡本 結子 リサ"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "青原 桃香",
-      "youtube": "https://youtu.be/xKu2JanmcJ4"
+      "caster": "小林 李衣奈"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小川 千奈",
-      "youtube": "https://youtu.be/FwV5WhYxlto"
+      "caster": "戸北 美月"
     },
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "戸北 美月",
-      "youtube": "https://youtu.be/2mjofqN2JRY"
+      "caster": "駒木 結衣"
     },
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "駒木 結衣",
-      "youtube": "https://youtu.be/NrPe5PRWXFM"
+      "caster": "山岸 愛梨"
     },
     {
       "time": "23:00",
@@ -94,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-09T19:53:21.532959+09:00"
+  "timestamp": "2026-08-09T22:16:59.704607+09:00"
 }
