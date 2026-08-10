@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "小林 李衣奈"
+      "caster": "小林 李衣奈",
+      "youtube": "https://youtu.be/O-I98-XPf8o"
     },
     {
       "time": "14:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-10T08:48:25.227108+09:00"
+  "timestamp": "2026-08-10T11:36:08.029127+09:00"
 }
