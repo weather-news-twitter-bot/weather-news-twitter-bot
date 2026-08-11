@@ -55,12 +55,14 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "魚住 茉由"
+      "caster": "魚住 茉由",
+      "youtube": "https://youtu.be/BYky6R7v5Qg"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "岡本 結子 リサ"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/F9KIytIriNM"
     },
     {
       "time": "11:00",
@@ -88,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-12T00:17:16.042726+09:00"
+  "timestamp": "2026-08-12T08:04:44.507978+09:00"
 }
