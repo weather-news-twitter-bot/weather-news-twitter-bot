@@ -55,7 +55,8 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "岡本 結子 リサ"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/wS2cYXTE5Hk"
     },
     {
       "time": "08:00",
@@ -88,5 +89,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-14T00:16:49.038919+09:00"
+  "timestamp": "2026-08-14T04:27:43.461189+09:00"
 }
