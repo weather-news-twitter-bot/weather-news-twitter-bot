@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "青原 桃香"
+      "caster": "青原 桃香",
+      "youtube": "https://youtu.be/mFEoqSSkxKQ"
     },
     {
       "time": "11:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-14T04:27:43.461189+09:00"
+  "timestamp": "2026-08-14T08:04:24.253775+09:00"
 }
