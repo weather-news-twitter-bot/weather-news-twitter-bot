@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小林 李衣奈"
+      "caster": "小林 李衣奈",
+      "youtube": "https://youtu.be/xVtgrdkUUYg"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-16T10:58:28.789699+09:00"
+  "timestamp": "2026-08-16T13:51:25.393950+09:00"
 }
