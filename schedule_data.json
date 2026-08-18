@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "小川 千奈"
+      "caster": "小川 千奈",
+      "youtube": "https://youtu.be/KoUUZeDH7A0"
     },
     {
       "time": "14:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-18T08:39:28.597999+09:00"
+  "timestamp": "2026-08-18T10:51:55.693675+09:00"
 }
