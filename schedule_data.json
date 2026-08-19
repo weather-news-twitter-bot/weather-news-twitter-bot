@@ -19,34 +19,39 @@
     },
     {
       "time": "11:00",
-      "caster": "田辺 真南葉",
-      "status": "confirmed",
-      "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
-    },
-    {
-      "time": "14:00",
       "caster": "小林 李衣奈",
       "status": "confirmed",
-      "program": "ウェザーニュースLiVE・アフタヌーン",
+      "program": "ウェザーニュースLiVE・コーヒータイム",
       "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
     },
     {
+      "time": "14:00",
+      "caster": "田辺 真南葉",
+      "status": "confirmed",
+      "program": "ウェザーニュースLiVE・アフタヌーン",
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+    },
+    {
       "time": "17:00",
-      "caster": "戸北 美月",
+      "caster": "駒木 結衣",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
     },
     {
       "time": "20:00",
-      "caster": "駒木 結衣",
+      "caster": "戸北 美月",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
   "full": [
+    {
+      "time": "00:00",
+      "program": "ウェザーニュースLiVE",
+      "caster": null
+    },
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
@@ -60,22 +65,22 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "田辺 真南葉"
+      "caster": "小林 李衣奈"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小林 李衣奈"
+      "caster": "田辺 真南葉"
     },
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "戸北 美月"
+      "caster": "駒木 結衣"
     },
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "駒木 結衣"
+      "caster": "戸北 美月"
     },
     {
       "time": "23:00",
@@ -83,5 +88,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-19T22:11:00.581350+09:00"
+  "timestamp": "2026-08-20T00:47:50.959992+09:00"
 }
