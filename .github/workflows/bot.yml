@@ -40,7 +40,16 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # PyPI 側の接続断（Connection reset by peer）でたまに落ちる。
+        # pip 既定のリトライは10秒で打ち止めなので、外側でも間を空けて3回まで試す。
+        run: |
+          for i in 1 2 3; do
+            pip install --retries 5 --timeout 30 -r requirements.txt && exit 0
+            echo "pip install 失敗 ($i/3)。20秒待って再試行"
+            sleep 20
+          done
+          echo "::error::pip install が3回とも失敗（PyPI 到達不能）"
+          exit 1
 
       - name: Run bot (reconcile)
         env:
