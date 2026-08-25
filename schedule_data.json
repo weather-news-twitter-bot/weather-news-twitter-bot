@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/ymJ1Gbv1sYU"
     },
     {
       "time": "11:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-26T04:47:10.248200+09:00"
+  "timestamp": "2026-08-26T08:40:18.036776+09:00"
 }
