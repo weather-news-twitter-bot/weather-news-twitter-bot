@@ -85,7 +85,8 @@
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "駒木 結衣"
+      "caster": "駒木 結衣",
+      "youtube": "https://youtu.be/htz9A1JMrr8"
     },
     {
       "time": "23:00",
@@ -93,5 +94,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-26T17:01:34.136512+09:00"
+  "timestamp": "2026-08-26T19:52:53.765148+09:00"
 }
