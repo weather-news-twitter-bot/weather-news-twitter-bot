@@ -67,17 +67,20 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "岡本 結子 リサ"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/PYiw01XDEQ4"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小林 李衣奈"
+      "caster": "小林 李衣奈",
+      "youtube": "https://youtu.be/ysFNagtexKQ"
     },
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "駒木 結衣"
+      "caster": "駒木 結衣",
+      "youtube": "https://youtu.be/l9ZM776cPuQ"
     },
     {
       "time": "20:00",
@@ -90,5 +93,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-27T08:38:14.150980+09:00"
+  "timestamp": "2026-08-27T18:53:51.198634+09:00"
 }
