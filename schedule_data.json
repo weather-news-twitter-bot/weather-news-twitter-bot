@@ -1,7 +1,7 @@
 {
-  "target_date": "2026-08-28",
-  "target_date_str": "2026年08月28日",
-  "announced_date": "2026-08-28",
+  "target_date": "2026-08-29",
+  "target_date_str": "2026年08月29日",
+  "announced_date": "2026-08-29",
   "tweeted": [
     {
       "time": "05:00",
@@ -19,17 +19,17 @@
     },
     {
       "time": "11:00",
-      "caster": "岡本 結子 リサ",
+      "caster": "青原 桃香",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
     },
     {
       "time": "14:00",
-      "caster": "戸北 美月",
+      "caster": "山岸 愛梨",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/yamagishi.html"
     },
     {
       "time": "17:00",
@@ -55,26 +55,22 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "田辺 真南葉",
-      "youtube": "https://youtu.be/CnaWKLVARo8"
+      "caster": "田辺 真南葉"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "松本 真央",
-      "youtube": "https://youtu.be/6mwKd87pVj8"
+      "caster": "松本 真央"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "岡本 結子 リサ",
-      "youtube": "https://youtu.be/2MzTVfKSZ-U"
+      "caster": "青原 桃香"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "戸北 美月",
-      "youtube": "https://youtu.be/WHv-al-hFtg"
+      "caster": "山岸 愛梨"
     },
     {
       "time": "17:00",
@@ -92,5 +88,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-28T14:26:17.820143+09:00"
+  "timestamp": "2026-08-29T03:45:45.726736+09:00"
 }
