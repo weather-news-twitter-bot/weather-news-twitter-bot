@@ -48,24 +48,33 @@
   ],
   "full": [
     {
+      "time": "00:00",
+      "program": "ウェザーニュースLiVE",
+      "caster": null
+    },
+    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/CnaWKLVARo8"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "松本 真央"
+      "caster": "松本 真央",
+      "youtube": "https://youtu.be/6mwKd87pVj8"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "岡本 結子 リサ"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/2MzTVfKSZ-U"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "戸北 美月"
+      "caster": "戸北 美月",
+      "youtube": "https://youtu.be/WHv-al-hFtg"
     },
     {
       "time": "17:00",
@@ -83,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-27T23:13:52.487356+09:00"
+  "timestamp": "2026-08-28T14:26:17.820143+09:00"
 }
