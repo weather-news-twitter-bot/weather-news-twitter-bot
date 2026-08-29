@@ -55,17 +55,20 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/tBziYmIiGI0"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "松本 真央"
+      "caster": "松本 真央",
+      "youtube": "https://youtu.be/Uojs-QJuGOk"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "青原 桃香"
+      "caster": "青原 桃香",
+      "youtube": "https://youtu.be/Vupttu0y7t8"
     },
     {
       "time": "14:00",
@@ -88,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-29T03:45:45.726736+09:00"
+  "timestamp": "2026-08-29T11:13:48.730927+09:00"
 }
