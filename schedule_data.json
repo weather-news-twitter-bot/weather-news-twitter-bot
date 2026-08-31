@@ -67,12 +67,14 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "山岸 愛梨"
+      "caster": "山岸 愛梨",
+      "youtube": "https://youtu.be/0EWjXOopMzA"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "戸北 美月"
+      "caster": "戸北 美月",
+      "youtube": "https://youtu.be/MRQtnISbX-M"
     },
     {
       "time": "17:00",
@@ -90,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-08-31T08:32:20.271853+09:00"
+  "timestamp": "2026-08-31T14:40:51.306246+09:00"
 }
