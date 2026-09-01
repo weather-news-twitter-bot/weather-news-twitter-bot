@@ -67,12 +67,14 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "岡本 結子 リサ"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/Y-KqwZS5eh4"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "川畑 玲"
+      "caster": "川畑 玲",
+      "youtube": "https://youtu.be/L-HwBMPegT4"
     },
     {
       "time": "17:00",
@@ -90,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-01T08:52:45.041609+09:00"
+  "timestamp": "2026-09-01T14:14:17.220118+09:00"
 }
