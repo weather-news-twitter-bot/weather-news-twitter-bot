@@ -55,12 +55,14 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "松本 真央"
+      "caster": "松本 真央",
+      "youtube": "https://youtu.be/72BTaUmFNkY"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/DntmaQ4zdOE"
     },
     {
       "time": "11:00",
@@ -88,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-02T03:34:30.519933+09:00"
+  "timestamp": "2026-09-02T09:17:24.136961+09:00"
 }
