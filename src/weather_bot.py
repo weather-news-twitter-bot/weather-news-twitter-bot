@@ -312,13 +312,22 @@ def lineup_for(dated: list[dict], target: date, pad_standard: bool) -> list[dict
 def filter_upcoming(programs: list[dict], target: date, now: datetime) -> list[dict]:
     """
     放送済み枠を除外する（追跡日が今日の場合のみ）。翌日分は全て返す。
+
+    「放送済み」は終わった枠のこと。進行中の枠（開始済み・次の枠が始まる前）は残す。
+    JSON は進行中の枠を先頭に返すので、開始後の差し替えもここで拾える。
+    実際 2026-09-02 は 14:00 枠が 山岸→白井 に差し替わったのを 14:51 の実行で
+    観測していたのに、開始済みという理由で突き合わせから外して通知を落とした
+    （GitHub の cron が 09:17〜14:51 の間で一度も走らなかった）。
     """
     if target != today_bday(now):
         return programs
+    day0 = datetime.combine(target, datetime.min.time(), JST)
+    started = [p for p in programs if day0 + timedelta(minutes=slot_minutes(p['time'])) < now]
+    on_air = max(started, key=lambda p: slot_minutes(p['time']), default=None)
     out = []
     for p in programs:
-        slot_dt = datetime.combine(target, datetime.min.time(), JST) + timedelta(minutes=slot_minutes(p['time']))
-        if slot_dt >= now:
+        slot_dt = day0 + timedelta(minutes=slot_minutes(p['time']))
+        if slot_dt >= now or p is on_air:
             out.append(p)
     return out
 
