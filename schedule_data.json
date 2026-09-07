@@ -67,12 +67,14 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "白井 ゆかり"
+      "caster": "白井 ゆかり",
+      "youtube": "https://youtu.be/Hpk169sIXmw"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "山岸 愛梨"
+      "caster": "山岸 愛梨",
+      "youtube": "https://youtu.be/FAj65J64AN0"
     },
     {
       "time": "17:00",
@@ -90,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-07T09:36:29.337750+09:00"
+  "timestamp": "2026-09-07T14:13:14.878473+09:00"
 }
