@@ -67,12 +67,14 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "白井 ゆかり"
+      "caster": "白井 ゆかり",
+      "youtube": "https://youtu.be/674lr89Qfj4"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小川 千奈"
+      "caster": "小川 千奈",
+      "youtube": "https://youtu.be/YKjfW2o1_84"
     },
     {
       "time": "17:00",
@@ -90,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-09T08:25:40.974709+09:00"
+  "timestamp": "2026-09-09T15:38:07.714651+09:00"
 }
