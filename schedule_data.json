@@ -1,28 +1,28 @@
 {
-  "target_date": "2026-09-09",
-  "target_date_str": "2026年09月09日",
-  "announced_date": "2026-09-09",
+  "target_date": "2026-09-10",
+  "target_date_str": "2026年09月10日",
+  "announced_date": "2026-09-10",
   "tweeted": [
     {
       "time": "05:00",
-      "caster": "魚住 茉由",
+      "caster": "岡本 結子 リサ",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
     },
     {
       "time": "08:00",
-      "caster": "青原 桃香",
+      "caster": "松本 真央",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
       "time": "11:00",
-      "caster": "白井 ゆかり",
+      "caster": "田辺 真南葉",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/shirai.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
     },
     {
       "time": "14:00",
@@ -48,33 +48,24 @@
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "魚住 茉由",
-      "youtube": "https://youtu.be/AHjoiazE6_g"
+      "caster": "岡本 結子 リサ"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "青原 桃香",
-      "youtube": "https://youtu.be/wb7v4x5chig"
+      "caster": "松本 真央"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "白井 ゆかり",
-      "youtube": "https://youtu.be/674lr89Qfj4"
+      "caster": "田辺 真南葉"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小川 千奈",
-      "youtube": "https://youtu.be/YKjfW2o1_84"
+      "caster": "小川 千奈"
     },
     {
       "time": "17:00",
@@ -92,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-09T15:38:07.714651+09:00"
+  "timestamp": "2026-09-09T21:06:00.881806+09:00"
 }
