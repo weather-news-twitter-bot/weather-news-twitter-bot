@@ -78,7 +78,8 @@
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "駒木 結衣"
+      "caster": "駒木 結衣",
+      "youtube": "https://youtu.be/g96osR4vcHU"
     },
     {
       "time": "20:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-10T13:48:34.894635+09:00"
+  "timestamp": "2026-09-10T18:20:09.659356+09:00"
 }
