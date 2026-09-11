@@ -62,6 +62,10 @@ jobs:
           TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
           SKIP_TWEET_FLAG: ${{ github.event.inputs.dry_run }}
           ANNOUNCE_TEST: ${{ github.event.inputs.announce_test }}
+          # 2026-09-11 に X API が従量課金になり（402 credits depleted）、ここからは
+          # 投稿しない。告知はローカル PC の src/tweet_local.py（ブラウザ経由）が
+          # 21時に1回だけ出す。ここは番組表の記録（full / final / history）だけ続ける。
+          TWEET_VIA: none
           TZ: 'Asia/Tokyo'
         run: python src/weather_bot.py
 

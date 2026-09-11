@@ -484,8 +484,22 @@ def build_change_tweet(target: date, lineup: list[dict], decisions: list,
 
 
 # ============================ Twitter投稿 ============================
+def tweet_via() -> str:
+    """
+    X への書き込み経路。'api'（既定・tweepy）か 'none'（書かない＝記録だけ）。
+
+    2026-09-11 に X API が従量課金になり、無料では投稿できなくなった。告知は
+    ローカル PC のブラウザ（src/tweet_local.py）が21時に1回だけ出す形に移し、
+    GitHub Actions 側は 'none' で番組表の記録（full / final / history）だけ続ける。
+    """
+    return os.getenv('TWEET_VIA', 'api')
+
+
 def post_to_twitter(tweet_text: str) -> Optional[str]:
     """ツイートを投稿する。環境変数のAPIキーで認証。成功でツイートID、失敗でNone。"""
+    if tweet_via() == 'none':
+        log("TWEET_VIA=none: X には書かず、記録だけ進める")
+        return 'none'
     try:
         import tweepy
         client = tweepy.Client(
@@ -518,6 +532,8 @@ def pin_tweet(tweet_id: str) -> bool:
 
     固定できる投稿は1件だけなので、新しく固定すれば前日ぶんは自動で外れる。
     """
+    if tweet_id == 'none':
+        return False
     try:
         from requests_oauthlib import OAuth1Session
         session = OAuth1Session(
@@ -782,6 +798,8 @@ def history_tweet_record(target: date, event: str, lineup: list[dict]) -> dict:
         'event': event,
         'lineup': {p['time']: (p['caster'] if (p.get('caster') and p['caster'] != '未定') else None)
                    for p in sorted(lineup, key=lambda p: slot_minutes(p['time']))},
+        # X に実際に書いたか。'none' の時は記録だけ（投稿はローカルの tweet_local.py）
+        'posted': tweet_via() != 'none',
     }
 
 
