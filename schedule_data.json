@@ -55,12 +55,14 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "青原 桃香"
+      "caster": "青原 桃香",
+      "youtube": "https://youtu.be/5Nvnem-JRls"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "魚住 茉由"
+      "caster": "魚住 茉由",
+      "youtube": "https://youtu.be/EeFr0jKAEeg"
     },
     {
       "time": "11:00",
@@ -88,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-12T00:22:39.381766+09:00"
+  "timestamp": "2026-09-12T09:50:10.262395+09:00"
 }
