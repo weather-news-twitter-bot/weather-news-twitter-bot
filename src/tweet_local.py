@@ -142,8 +142,31 @@ def pin_in_browser(page, status_id: str) -> bool:
         return False
 
 
+def ensure_browser() -> None:
+    """Edge（9333）が居なければ起こす。起こし方は隣のクロストーク側 edge_up.py に任せる。
+
+    2026-09-14: 16:55 に別のタスクが起こした Edge が 21時までに閉じられていて、
+    21:00 と 21:20 の告知が両方「繋がらない」で流れた。クロストーク側の各タスクは
+    毎回 ensure_edge を通るのに、こちらだけ「居る前提」だったのが穴。
+    edge_up.py が見つからない環境（CI 等）では何もしない＝従来どおり繋ぎに行く。
+    """
+    if os.getenv("X_CDP"):
+        return  # 別の窓を指している時は起こし方が分からないので触らない
+    sib = os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                       "WeatherNewsCrosstalk", "scripts")
+    if not os.path.exists(os.path.join(sib, "edge_up.py")):
+        return
+    sys.path.insert(0, sib)
+    try:
+        from edge_up import ensure_edge
+        ensure_edge(log=log)
+    except Exception as e:
+        log(f"Edge の起動確認に失敗（そのまま繋ぎに行く）: {str(e)[:120]}")
+
+
 def post_in_browser(text: str, marker: str, pin: bool) -> str | None:
     from playwright.sync_api import sync_playwright
+    ensure_browser()
     with sync_playwright() as p:
         try:
             browser = p.chromium.connect_over_cdp(CDP, timeout=8000)
