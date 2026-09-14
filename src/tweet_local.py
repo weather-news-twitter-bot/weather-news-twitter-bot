@@ -142,31 +142,57 @@ def pin_in_browser(page, status_id: str) -> bool:
         return False
 
 
-def ensure_browser() -> None:
-    """Edge（9333）が居なければ起こす。起こし方は隣のクロストーク側 edge_up.py に任せる。
+SIBLING_SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                               "WeatherNewsCrosstalk", "scripts")
 
-    2026-09-14: 16:55 に別のタスクが起こした Edge が 21時までに閉じられていて、
-    21:00 と 21:20 の告知が両方「繋がらない」で流れた。クロストーク側の各タスクは
-    毎回 ensure_edge を通るのに、こちらだけ「居る前提」だったのが穴。
+
+def ensure_browser() -> bool:
+    """Edge（9333）が居なければ窓なしで起こす。起こし方は隣の edge_up.py に任せる。
+
+    2026-09-14: 16:55 に別のタスクが起こした Edge が 21時までに閉じられていて
+    （ryo_d が邪魔なので閉じた）、21:00 と 21:20 の告知が両方「繋がらない」で流れた。
+    クロストーク側の各タスクは毎回 ensure_edge を通るのに、こちらだけ「居る前提」
+    だったのが穴。起こすのは窓なし＝画面に何も出ない。投稿が済んだら、この回が
+    起こした時に限り close_browser で畳む（残しても閉じられるだけ）。
     edge_up.py が見つからない環境（CI 等）では何もしない＝従来どおり繋ぎに行く。
+
+    Returns: この回が起こしたか（True なら後で畳む）
     """
     if os.getenv("X_CDP"):
-        return  # 別の窓を指している時は起こし方が分からないので触らない
-    sib = os.path.join(os.path.dirname(os.path.dirname(HERE)),
-                       "WeatherNewsCrosstalk", "scripts")
-    if not os.path.exists(os.path.join(sib, "edge_up.py")):
-        return
-    sys.path.insert(0, sib)
+        return False  # 別の窓を指している時は起こし方が分からないので触らない
+    if not os.path.exists(os.path.join(SIBLING_SCRIPTS, "edge_up.py")):
+        return False
+    sys.path.insert(0, SIBLING_SCRIPTS)
     try:
-        from edge_up import ensure_edge
-        ensure_edge(log=log)
+        from edge_up import alive, ensure_edge
+        if alive():
+            return False
+        return ensure_edge(log=log, headless=True)
     except Exception as e:
         log(f"Edge の起動確認に失敗（そのまま繋ぎに行く）: {str(e)[:120]}")
+        return False
+
+
+def close_browser() -> None:
+    """ensure_browser が起こした Edge を丸ごと畳む（人が開いていた窓には使わない）。"""
+    try:
+        from tabs import shutdown
+        shutdown(log=log)
+    except Exception as e:
+        log(f"Edge を畳めませんでした（続けます）: {str(e)[:120]}")
 
 
 def post_in_browser(text: str, marker: str, pin: bool) -> str | None:
     from playwright.sync_api import sync_playwright
-    ensure_browser()
+    started = ensure_browser()
+    try:
+        return _post_in_browser(sync_playwright, text, marker, pin)
+    finally:
+        if started:
+            close_browser()
+
+
+def _post_in_browser(sync_playwright, text: str, marker: str, pin: bool) -> str | None:
     with sync_playwright() as p:
         try:
             browser = p.chromium.connect_over_cdp(CDP, timeout=8000)
