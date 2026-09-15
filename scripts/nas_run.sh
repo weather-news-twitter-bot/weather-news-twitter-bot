@@ -52,7 +52,7 @@ if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt 2000000 ]; then
 fi
 
 {
-  echo "=== $(date '+%F %T') $* ==="
+  echo "=== $(date '+%F %T') user=$(id -un) $* ==="
   cd "$REPO" || exit 1
   git pull -q --ff-only 2>&1
   "$BASE/venv/bin/python" src/weather_bot.py 2>&1
