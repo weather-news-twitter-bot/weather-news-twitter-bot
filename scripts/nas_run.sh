@@ -70,6 +70,14 @@ fi
 # 3回続いたら1通、その後も続くなら 12 時間ごとに1通。メール本文にはログの末尾を載せる。
 STREAK=$LOCAL/fail_streak
 [ -n "$SKIP_TWEET_FLAG" ] && exit $rc
+# メール通知の試験: .local/test_mail を置いておくと、次の回に1度だけ異常終了して消える
+if [ -f "$LOCAL/test_mail" ]; then
+  rm -f "$LOCAL/test_mail"
+  echo "WNL 番組表 bot のメール通知の試験です（本物の失敗ではない）。ログの末尾:"
+  echo
+  tail -12 "$LOG"
+  exit 1
+fi
 if [ "$rc" -eq 0 ]; then
   rm -f "$STREAK"
   exit 0
