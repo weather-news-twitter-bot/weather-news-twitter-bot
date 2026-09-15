@@ -486,11 +486,11 @@ def build_change_tweet(target: date, lineup: list[dict], decisions: list,
 # ============================ Twitter投稿 ============================
 def tweet_via() -> str:
     """
-    X への書き込み経路。'api'（既定・tweepy）か 'none'（書かない＝記録だけ）。
-
-    2026-09-11 に X API が従量課金になり、無料では投稿できなくなった。告知は
-    ローカル PC のブラウザ（src/tweet_local.py）が21時に1回だけ出す形に移し、
-    GitHub Actions 側は 'none' で番組表の記録（full / final / history）だけ続ける。
+    X への書き込み経路。
+      'api'     … tweepy（従量課金。2026-09-11 からクレジット切れで使っていない）
+      'browser' … ログイン済みブラウザに CDP で繋いで打つ（src/x_browser.py）。
+                  2026-09-16 から NAS（DS220j）の Docker Chromium で毎時これ
+      'none'    … 書かない＝番組表の記録（full / final / history）だけ
     """
     return os.getenv('TWEET_VIA', 'api')
 
@@ -500,6 +500,10 @@ def post_to_twitter(tweet_text: str) -> Optional[str]:
     if tweet_via() == 'none':
         log("TWEET_VIA=none: X には書かず、記録だけ進める")
         return 'none'
+    if tweet_via() == 'browser':
+        import x_browser
+        x_browser.set_logger(log)
+        return x_browser.post(tweet_text)
     try:
         import tweepy
         client = tweepy.Client(
@@ -534,6 +538,10 @@ def pin_tweet(tweet_id: str) -> bool:
     """
     if tweet_id == 'none':
         return False
+    if tweet_via() == 'browser':
+        import x_browser
+        x_browser.set_logger(log)
+        return x_browser.pin(tweet_id)
     try:
         from requests_oauthlib import OAuth1Session
         session = OAuth1Session(

@@ -20,7 +20,6 @@
 import argparse
 import json
 import os
-import re
 import sys
 from datetime import timedelta
 
@@ -33,9 +32,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import weather_bot as wb  # noqa: E402
 
-CDP = os.getenv("X_CDP", "http://127.0.0.1:9333")
-HANDLE = "wnl_timetable"
-COMPOSE = "https://x.com/compose/post"
 # 置き場はリポジトリ内の .local/（.gitignore 済み）。%LOCALAPPDATA% は使わない:
 # Microsoft Store 版 Python は AppData への書き込みを Packages\...\LocalCache に
 # 黙って付け替えるので、別の Python から見ると「無い」ことになり二重投稿になる。
@@ -62,170 +58,14 @@ def save_state(d: dict) -> None:
 
 
 # ============================ ブラウザ操作 ============================
-def type_text(page, text: str) -> None:
-    box = page.locator('div[data-testid="tweetTextarea_0"]').first
-    box.wait_for(state="visible", timeout=20000)
-    box.click()
-    # 改行は Enter だと送信に割り当たることがあるので、行ごとに入れる
-    for i, line in enumerate(text.split("\n")):
-        if i:
-            page.keyboard.press("Shift+Enter")
-        if line:
-            page.keyboard.type(line, delay=6)
-    # 末尾がハッシュタグだと候補の吹き出しが出たままになり、投稿ボタンが押せない
-    # （Playwright が「安定していない」と判断して待ち続ける）。空白1つで閉じる。
-    # 末尾の空白は X 側で落ちるので本文は変わらない。
-    page.keyboard.type(" ")
+# 画面の操作は x_browser.py に移した（NAS の weather_bot.py と同じ手順を使う）。
+import x_browser  # noqa: E402
 
-
-def click_send(page) -> bool:
-    for name in ("tweetButton", "tweetButtonInline"):
-        try:
-            btn = page.locator(f'button[data-testid="{name}"]').first
-            if btn.count() and btn.is_enabled():
-                btn.click(timeout=6000)
-                return True
-        except Exception:
-            continue
-    return False
-
-
-def find_status_id(page, marker: str) -> str | None:
-    """
-    投稿直後のトーストの「表示」リンクから status id を取る。取れなければ
-    プロフィールを開いて、本文に marker（日付行）を含む最新の投稿を探す。
-    """
-    try:
-        a = page.locator('[data-testid="toast"] a[href*="/status/"]').first
-        a.wait_for(state="visible", timeout=8000)
-        m = re.search(r"/status/(\d+)", a.get_attribute("href") or "")
-        if m:
-            return m.group(1)
-    except Exception:
-        pass
-    try:
-        page.goto(f"https://x.com/{HANDLE}", wait_until="domcontentloaded")
-        page.wait_for_timeout(5000)
-        arts = page.locator("article")
-        for i in range(min(arts.count(), 8)):
-            art = arts.nth(i)
-            if marker not in (art.inner_text() or ""):
-                continue
-            links = art.locator('a[href*="/status/"]')
-            for j in range(links.count()):
-                m = re.search(r"/status/(\d+)", links.nth(j).get_attribute("href") or "")
-                if m:
-                    return m.group(1)
-    except Exception as e:
-        log(f"投稿の id を探せません: {str(e)[:100]}")
-    return None
-
-
-def pin_in_browser(page, status_id: str) -> bool:
-    """投稿ページの「…」→「プロフィールに固定する」→ 確認。前の固定は自動で外れる。"""
-    try:
-        page.goto(f"https://x.com/{HANDLE}/status/{status_id}", wait_until="domcontentloaded")
-        page.wait_for_timeout(5000)
-        page.locator('article [data-testid="caret"]').first.click(timeout=10000)
-        item = page.locator('[role="menuitem"]', has_text=re.compile("固定|Pin")).first
-        item.wait_for(state="visible", timeout=8000)
-        if re.search("固定を解除|Unpin", item.inner_text() or ""):
-            log("既に固定済み")
-            return True
-        item.click()
-        page.locator('[data-testid="confirmationSheetConfirm"]').first.click(timeout=8000)
-        page.wait_for_timeout(2000)
-        log(f"固定ポストに設定: {status_id}")
-        return True
-    except Exception as e:
-        log(f"固定ポスト設定に失敗（告知は成功扱い）: {str(e)[:150]}")
-        return False
-
-
-SIBLING_SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(HERE)),
-                               "WeatherNewsCrosstalk", "scripts")
-
-
-def ensure_browser() -> bool:
-    """Edge（9333）が居なければ窓なしで起こす。起こし方は隣の edge_up.py に任せる。
-
-    2026-09-14: 16:55 に別のタスクが起こした Edge が 21時までに閉じられていて
-    （ryo_d が邪魔なので閉じた）、21:00 と 21:20 の告知が両方「繋がらない」で流れた。
-    クロストーク側の各タスクは毎回 ensure_edge を通るのに、こちらだけ「居る前提」
-    だったのが穴。起こすのは窓なし＝画面に何も出ない。投稿が済んだら、この回が
-    起こした時に限り close_browser で畳む（残しても閉じられるだけ）。
-    edge_up.py が見つからない環境（CI 等）では何もしない＝従来どおり繋ぎに行く。
-
-    Returns: この回が起こしたか（True なら後で畳む）
-    """
-    if os.getenv("X_CDP"):
-        return False  # 別の窓を指している時は起こし方が分からないので触らない
-    if not os.path.exists(os.path.join(SIBLING_SCRIPTS, "edge_up.py")):
-        return False
-    sys.path.insert(0, SIBLING_SCRIPTS)
-    try:
-        from edge_up import alive, ensure_edge
-        if alive():
-            return False
-        return ensure_edge(log=log, headless=True)
-    except Exception as e:
-        log(f"Edge の起動確認に失敗（そのまま繋ぎに行く）: {str(e)[:120]}")
-        return False
-
-
-def close_browser() -> None:
-    """ensure_browser が起こした Edge を丸ごと畳む（人が開いていた窓には使わない）。"""
-    try:
-        from tabs import shutdown
-        shutdown(log=log)
-    except Exception as e:
-        log(f"Edge を畳めませんでした（続けます）: {str(e)[:120]}")
+x_browser.set_logger(log)
 
 
 def post_in_browser(text: str, marker: str, pin: bool) -> str | None:
-    from playwright.sync_api import sync_playwright
-    started = ensure_browser()
-    try:
-        return _post_in_browser(sync_playwright, text, marker, pin)
-    finally:
-        if started:
-            close_browser()
-
-
-def _post_in_browser(sync_playwright, text: str, marker: str, pin: bool) -> str | None:
-    with sync_playwright() as p:
-        try:
-            browser = p.chromium.connect_over_cdp(CDP, timeout=8000)
-        except Exception as e:
-            log(f"ブラウザ({CDP})に繋がりません: {str(e)[:100]}")
-            return None
-        ctx = browser.contexts[0] if browser.contexts else browser.new_context()
-        page = ctx.new_page()
-        try:
-            page.set_viewport_size({"width": 1280, "height": 900})
-            page.goto(COMPOSE, wait_until="domcontentloaded")
-            page.wait_for_timeout(6000)
-            if "login" in page.url or "i/flow" in page.url:
-                log("X にログインしていません")
-                return None
-            type_text(page, text)
-            page.wait_for_timeout(1500)
-            if not click_send(page):
-                log("投稿ボタンを押せませんでした")
-                return None
-            page.wait_for_timeout(3000)
-            sid = find_status_id(page, marker)
-            log(f"投稿しました: https://x.com/{HANDLE}/status/{sid or '?'}")
-            if pin and sid:
-                pin_in_browser(page, sid)
-            elif pin:
-                log("id が取れなかったので固定は見送り")
-            return sid or "posted"
-        finally:
-            try:
-                page.close()
-            except Exception:
-                pass
+    return x_browser.post(text, pin=pin)
 
 
 # ============================ 本体 ============================
