@@ -63,5 +63,23 @@ fi
         commit -q -m "BOT: update schedule state" && git push -q 2>&1 && echo "push 済み"
   fi
   echo "rc=$rc"
-  exit $rc
 } >> "$LOG" 2>&1
+
+# ---- 失敗が続いた時だけ異常終了にする（DSM タスクスケジューラの「異常終了時にメール」に乗せる）----
+# 1回の失敗（番組表が取れない・投稿画面が重い）は 20 分後に自分で取り返すので黙る。
+# 3回続いたら1通、その後も続くなら 12 時間ごとに1通。メール本文にはログの末尾を載せる。
+STREAK=$LOCAL/fail_streak
+[ -n "$SKIP_TWEET_FLAG" ] && exit $rc
+if [ "$rc" -eq 0 ]; then
+  rm -f "$STREAK"
+  exit 0
+fi
+n=$(( $(cat "$STREAK" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$STREAK"
+if [ "$n" -eq 3 ] || [ $(( n % 36 )) -eq 0 ]; then
+  echo "WNL 番組表 bot が ${n} 回続けて失敗しています（20分おき）。ログの末尾:"
+  echo
+  tail -40 "$LOG"
+  exit 1
+fi
+exit 0
