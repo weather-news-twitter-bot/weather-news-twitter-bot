@@ -95,7 +95,7 @@ def close_browser() -> None:
         if STOP_CMD:
             subprocess.run(STOP_CMD, shell=True, check=False, timeout=60)
             return
-        from tabs import shutdown
+        from tabs import shutdown  # Windows PC（edge_up.py と同じ場所）
         shutdown(log=_log)
     except Exception as e:
         _log(f"ブラウザを畳めませんでした（続けます）: {str(e)[:120]}")
@@ -104,7 +104,8 @@ def close_browser() -> None:
 # ============================ 画面操作 ============================
 def type_text(page, text: str) -> None:
     box = page.locator('div[data-testid="tweetTextarea_0"]').first
-    box.wait_for(state="visible", timeout=20000)
+    # NAS（ARM）では投稿画面が描かれるまで 15〜20 秒かかるので長めに待つ
+    box.wait_for(state="visible", timeout=60000)
     box.click()
     # 改行は Enter だと送信に割り当たることがあるので、行ごとに入れる
     for i, line in enumerate(text.split("\n")):
@@ -193,13 +194,18 @@ def marker_of(text: str) -> str:
 
 def _open(p):
     try:
-        browser = p.chromium.connect_over_cdp(CDP, timeout=8000)
+        browser = p.chromium.connect_over_cdp(CDP, timeout=20000)
     except Exception as e:
         _log(f"ブラウザ({CDP})に繋がりません: {str(e)[:100]}")
         return None, None
     ctx = browser.contexts[0] if browser.contexts else browser.new_context()
     page = ctx.new_page()
-    page.set_viewport_size({"width": 1280, "height": 900})
+    # NAS（DS220j, ARM 1.4GHz）は x.com の描画が重く、1280 幅＋画像ありだと
+    # 1コマ 1 秒（Playwright の「見えた」判定が 1 分待ち）。700 幅で脇の欄を消し、
+    # 画像・動画を読まなければ 60fps に戻る（2026-09-16 実測: 入力欄まで 26 秒）。
+    page.set_viewport_size({"width": int(os.getenv("X_VIEWPORT_W", "700")), "height": 900})
+    page.route(re.compile(r"\.(png|jpe?g|gif|webp|mp4|m3u8|ts)(\?|$)|/video/|pbs\.twimg\.com|video\.twimg\.com"),
+               lambda r: r.abort())
     return browser, page
 
 
@@ -215,7 +221,7 @@ def post(text: str, pin: bool = False) -> Optional[str]:
         try:
             page.goto(COMPOSE, wait_until="domcontentloaded")
             page.wait_for_timeout(6000)
-            if "login" in page.url or "i/flow" in page.url:
+            if "login" in page.url or "i/flow" in page.url or "mode=login" in page.url:
                 _log("X にログインしていません")
                 return None
             type_text(page, text)

@@ -1,13 +1,10 @@
 name: 🌤️ WNL Timetable Bot
 
 on:
-  schedule:
-    # 20分おき（UTC）。:00 は混雑で遅延/スキップが多いので外す。
-    # GitHub の cron は間引かれる（2026-09-02 は毎時設定で1日3回しか走らず、
-    # 5時間半の空白の間に起きた差し替えを取りこぼした）。回数を増やして耐える。
-    # 投稿数は変わらない（告知1回/日＋実変更のみ）。処理は冪等なので重なっても安全。
-    # 告知(21時JST)/監視は weather_bot.py 側が JST 時刻で判定する。
-    - cron: '17,37,57 * * * *'
+  # 2026-09-16 から定時実行は NAS（DS220j）のタスクスケジューラに移した
+  # （scripts/nas_run.sh。投稿も記録も NAS が1台でやる）。ここに cron を残すと
+  # 書き手が2つになって schedule_data.json / history.jsonl が食い違うので外した。
+  # 手動実行（dry-run の確認用）だけ残す。
   workflow_dispatch:
     inputs:
       dry_run:
