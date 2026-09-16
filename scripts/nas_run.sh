@@ -30,6 +30,7 @@ export TWEET_VIA=browser
 export X_CDP=http://127.0.0.1:9333
 export X_BROWSER_START="sudo -n /usr/local/bin/docker start wnl-chrome"
 export X_BROWSER_STOP="sudo -n /usr/local/bin/docker stop -t 3 wnl-chrome"
+export X_COOKIES=$LOCAL/x_cookies.json     # 固定は cookie 直送（ブラウザ無し）。無ければブラウザ
 
 for a in "$@"; do
   case "$a" in

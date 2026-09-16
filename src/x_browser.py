@@ -248,11 +248,76 @@ def post(text: str, pin: bool = False) -> Optional[str]:
                 pass
 
 
+# ============================ 固定（ブラウザ無し） ============================
+# X の web 版が固定に使っている GraphQL。ブラウザの通信を記録して取った
+# （2026-09-16。前は v1.1 account/pin_tweet.json を OAuth1 で叩いていたが、
+# web の cookie では 404 になる）。queryId は web 版の更新で変わりうる →
+# 通らなければ下のブラウザの道に落ちる。
+PIN_QUERY_ID = "VIHsNu89pK-kW35JpHq7Xw"
+WEB_BEARER = ("AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D"
+              "1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA")   # web 版の公開 bearer（誰でも同じ）
+COOKIES = os.getenv("X_COOKIES")            # Playwright 形式の cookie の JSON（NAS: .local/x_cookies.json）
+
+
+def _web_cookies() -> Optional[dict]:
+    """auth_token と ct0。無ければ None（→ ブラウザで固定する）。"""
+    if not COOKIES or not os.path.exists(COOKIES):
+        return None
+    try:
+        import json
+        ck = json.load(open(COOKIES, encoding="utf-8"))
+        c = {x["name"]: x["value"] for x in ck if "x.com" in (x.get("domain") or "")}
+        if "auth_token" in c and "ct0" in c:
+            return c
+    except Exception as e:
+        _log(f"cookie が読めません（ブラウザで固定します）: {str(e)[:80]}")
+    return None
+
+
+def pin_http(status_id: str) -> bool:
+    """cookie だけで固定する。ブラウザを起こさないので 1 秒で終わる（NAS で実測 200）。
+
+    ブラウザ経由は NAS（ARM）で「…」が出るまで 40 秒＋Docker の起動が要る。
+    固定は投稿と違って本文の入力が無いので、web 版と同じ要求を直に送れば足りる。
+    """
+    c = _web_cookies()
+    if not c:
+        return False
+    import json
+    import urllib.error
+    import urllib.request
+    body = json.dumps({"variables": {"tweet_id": status_id},
+                       "queryId": PIN_QUERY_ID}).encode()
+    req = urllib.request.Request(
+        f"https://x.com/i/api/graphql/{PIN_QUERY_ID}/PinTweet", data=body, method="POST",
+        headers={"authorization": "Bearer " + WEB_BEARER, "x-csrf-token": c["ct0"],
+                 "cookie": f"auth_token={c['auth_token']}; ct0={c['ct0']}",
+                 "x-twitter-auth-type": "OAuth2Session", "x-twitter-active-user": "yes",
+                 "content-type": "application/json",
+                 "origin": "https://x.com", "referer": "https://x.com/",
+                 "user-agent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                                "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            msg = r.read().decode("utf-8", "replace")
+        if "pinned successfully" in msg or '"pin_tweet"' in msg:
+            _log(f"固定ポストに設定（cookie 直送）: {status_id}")
+            return True
+        _log(f"固定の返事が想定外（ブラウザで固定します）: {msg[:120]}")
+    except urllib.error.HTTPError as e:
+        _log(f"固定 HTTP {e.code}（ブラウザで固定します）: {e.read()[:120]!r}")
+    except Exception as e:
+        _log(f"固定に失敗（ブラウザで固定します）: {str(e)[:120]}")
+    return False
+
+
 def pin(status_id: str) -> bool:
-    """既にある投稿を固定ポストにする。"""
+    """既にある投稿を固定ポストにする。cookie 直送 → 駄目ならブラウザ。"""
     if not status_id or not status_id.isdigit():
         _log("id が無いので固定は見送り")
         return False
+    if pin_http(status_id):
+        return True
     from playwright.sync_api import sync_playwright
     ensure_browser()
     with sync_playwright() as p:
