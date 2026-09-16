@@ -168,10 +168,14 @@ def pin_in_browser(page, status_id: str) -> bool:
     """投稿ページの「…」→「プロフィールに固定する」→ 確認。前の固定は自動で外れる。"""
     try:
         page.goto(f"https://x.com/{HANDLE}/status/{status_id}", wait_until="domcontentloaded")
-        page.wait_for_timeout(5000)
-        page.locator('article [data-testid="caret"]').first.click(timeout=10000)
+        # NAS（ARM）では投稿ページの「…」が出るまで 40 秒かかる（2026-09-16 実測:
+        # article 36.5秒 / caret 40.6秒）。5秒＋10秒の待ちでは毎回落ちていた。
+        # 投稿画面（type_text）と同じく、描かれるまで長く待つ。
+        caret = page.locator('article [data-testid="caret"]').first
+        caret.wait_for(state="visible", timeout=90000)
+        caret.click(timeout=10000)
         item = page.locator('[role="menuitem"]', has_text=re.compile("固定|Pin")).first
-        item.wait_for(state="visible", timeout=8000)
+        item.wait_for(state="visible", timeout=15000)
         if re.search("固定を解除|Unpin", item.inner_text() or ""):
             _log("既に固定済み")
             return True
