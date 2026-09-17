@@ -26,10 +26,10 @@
     },
     {
       "time": "14:00",
-      "caster": "駒木 結衣",
+      "caster": "白井 ゆかり",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/komaki.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/shirai.html"
     },
     {
       "time": "17:00",
@@ -48,6 +48,11 @@
   ],
   "full": [
     {
+      "time": "00:00",
+      "program": "ウェザーニュースLiVE",
+      "caster": null
+    },
+    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
       "caster": "福吉 貴文"
@@ -65,7 +70,7 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "駒木 結衣"
+      "caster": "白井 ゆかり"
     },
     {
       "time": "17:00",
@@ -83,5 +88,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-17T21:01:48.610869+09:00"
+  "timestamp": "2026-09-18T00:21:50.821200+09:00"
 }
