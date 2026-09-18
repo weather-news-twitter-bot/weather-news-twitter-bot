@@ -79,7 +79,8 @@
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "戸北 美月"
+      "caster": "戸北 美月",
+      "youtube": "https://youtu.be/dM9IwLUH4SE"
     },
     {
       "time": "20:00",
@@ -92,5 +93,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-18T14:00:06.981963+09:00"
+  "timestamp": "2026-09-18T17:00:06.438422+09:00"
 }
