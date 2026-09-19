@@ -139,15 +139,19 @@ def find_status_id(page, marker: str) -> Optional[str]:
     """
     try:
         a = page.locator('[data-testid="toast"] a[href*="/status/"]').first
-        a.wait_for(state="visible", timeout=8000)
+        a.wait_for(state="visible", timeout=20000)
         m = re.search(r"/status/(\d+)", a.get_attribute("href") or "")
         if m:
             return m.group(1)
     except Exception:
         pass
     try:
-        page.goto(f"https://x.com/{HANDLE}", wait_until="domcontentloaded")
-        page.wait_for_timeout(5000)
+        # NAS（ARM）では投稿直後のプロフィールが重く、goto の既定 30 秒で切れて
+        # 「id を探せません」→ 固定見送り になった（2026-09-18 21:02）。投稿画面や
+        # 「…」と同じく、描かれるまで長く待つ。
+        page.goto(f"https://x.com/{HANDLE}", wait_until="domcontentloaded", timeout=90000)
+        page.locator("article").first.wait_for(state="visible", timeout=90000)
+        page.wait_for_timeout(3000)
         arts = page.locator("article")
         for i in range(min(arts.count(), 8)):
             art = arts.nth(i)
