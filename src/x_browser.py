@@ -131,6 +131,45 @@ def click_send(page) -> bool:
     return False
 
 
+def watch_create_tweet(page) -> dict:
+    """投稿ボタンを押す前に仕掛ける。投稿の返事（CreateTweet の JSON）から id を拾う。
+
+    画面を読まない。NAS（ARM）では投稿直後のトーストもプロフィールも重く、
+    トースト 20秒＋プロフィール 90秒 待っても「id を探せません」→ 固定見送り が
+    続いた（2026-09-18・09-20）。返事は投稿と同時に届くので、描画を待たずに取れる。
+    描画に落ちるのは、この返事が読めなかった時だけ。
+    """
+    found: dict = {}
+
+    def on_response(resp):
+        if "id" in found or "CreateTweet" not in resp.url:
+            return
+        try:
+            body = resp.text()
+        except Exception:
+            return
+        # 返事には投稿の rest_id と投稿者（User）の rest_id が両方入る。
+        # 「"__typename":"Tweet"」の直後のものを採り、無ければ最初のもの
+        m = (re.search(r'"__typename"\s*:\s*"Tweet"\s*,\s*"rest_id"\s*:\s*"(\d{15,})"', body)
+             or re.search(r'"rest_id"\s*:\s*"(\d{15,})"', body))
+        if m:
+            found["id"] = m.group(1)
+
+    page.on("response", on_response)
+    return found
+
+
+def wait_status_id(page, found: dict, timeout_ms: int = 30000) -> Optional[str]:
+    """`watch_create_tweet` の入れ物に id が入るまで待つ（0.5秒刻み）。"""
+    waited = 0
+    while waited < timeout_ms:
+        if "id" in found:
+            return found["id"]
+        page.wait_for_timeout(500)
+        waited += 500
+    return found.get("id")
+
+
 def find_status_id(page, marker: str) -> Optional[str]:
     """
     投稿直後のトーストの「表示」リンクから status id を取る。取れなければ
@@ -234,11 +273,17 @@ def post(text: str, pin: bool = False) -> Optional[str]:
                 return None
             type_text(page, text)
             page.wait_for_timeout(1500)
+            found = watch_create_tweet(page)          # 押す前に仕掛ける
             if not click_send(page):
                 _log("投稿ボタンを押せませんでした")
                 return None
-            page.wait_for_timeout(3000)
-            sid = find_status_id(page, marker)
+            # まず投稿の返事から id を取る（描画を待たない）。駄目なら画面から
+            sid = wait_status_id(page, found)
+            if sid:
+                _log(f"投稿の返事から id を取りました: {sid}")
+            else:
+                page.wait_for_timeout(3000)
+                sid = find_status_id(page, marker)
             _log(f"投稿しました: https://x.com/{HANDLE}/status/{sid or '?'}")
             if pin and sid:
                 pin_in_browser(page, sid)
