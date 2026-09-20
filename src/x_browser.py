@@ -106,7 +106,9 @@ def type_text(page, text: str) -> None:
     box = page.locator('div[data-testid="tweetTextarea_0"]').first
     # NAS（ARM）では投稿画面が描かれるまで 15〜20 秒かかるので長めに待つ
     box.wait_for(state="visible", timeout=60000)
-    box.click()
+    # 見えてから押せるまでも待つ（2026-09-20 21:00、click の既定 30秒 で切れて
+    # その回の告知が丸ごと落ち、20分後の回に回った）
+    box.click(timeout=60000)
     # 改行は Enter だと送信に割り当たることがあるので、行ごとに入れる
     for i, line in enumerate(text.split("\n")):
         if i:
