@@ -133,6 +133,29 @@ def click_send(page) -> bool:
     return False
 
 
+def tweet_id_in(body: str) -> Optional[str]:
+    """CreateTweet の返事から**投稿の** id を取る。投稿者（User）の rest_id は採らない。
+
+    2026-09-21 21:31、正規表現で最初の rest_id を採って**投稿者の id**
+    （1936975151951908864 = @wnl_timetable）を投稿の id として記録し、固定も
+    その id に打って「成功」と出ていた（固定は前日のまま）。返事の中で rest_id は
+    投稿者の方が先に来ることがある。JSON として辿るのが正。控えは
+    conversation_id_str（新しい投稿では自分の id と同じで、User 側には無い）。
+    """
+    import json
+    try:
+        r = json.loads(body)["data"]["create_tweet"]["tweet_results"]["result"]
+        if r.get("__typename") == "TweetWithVisibilityResults":
+            r = r["tweet"]
+        rid = r.get("rest_id") or (r.get("legacy") or {}).get("id_str")
+        if rid and str(rid).isdigit():
+            return str(rid)
+    except Exception:
+        pass
+    m = re.search(r'"conversation_id_str"\s*:\s*"(\d{15,})"', body)
+    return m.group(1) if m else None
+
+
 def watch_create_tweet(page) -> dict:
     """投稿ボタンを押す前に仕掛ける。投稿の返事（CreateTweet の JSON）から id を拾う。
 
@@ -150,12 +173,9 @@ def watch_create_tweet(page) -> dict:
             body = resp.text()
         except Exception:
             return
-        # 返事には投稿の rest_id と投稿者（User）の rest_id が両方入る。
-        # 「"__typename":"Tweet"」の直後のものを採り、無ければ最初のもの
-        m = (re.search(r'"__typename"\s*:\s*"Tweet"\s*,\s*"rest_id"\s*:\s*"(\d{15,})"', body)
-             or re.search(r'"rest_id"\s*:\s*"(\d{15,})"', body))
-        if m:
-            found["id"] = m.group(1)
+        tid = tweet_id_in(body)
+        if tid:
+            found["id"] = tid
 
     page.on("response", on_response)
     return found
