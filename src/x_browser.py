@@ -253,6 +253,12 @@ def _open(p):
     # 1コマ 1 秒（Playwright の「見えた」判定が 1 分待ち）。700 幅で脇の欄を消し、
     # 画像・動画を読まなければ 60fps に戻る（2026-09-16 実測: 入力欄まで 26 秒）。
     page.set_viewport_size({"width": int(os.getenv("X_VIEWPORT_W", "700")), "height": 900})
+    # ★ページを開く待ちは、この窓の全部に一度で掛ける★（2026-09-21）
+    # goto の既定 30 秒は NAS では足りない。9/18 はプロフィール、9/21 は投稿画面
+    # そのものが 30 秒で切れて告知が2回落ちた。1か所ずつ timeout= を足すと
+    # 漏れるので（実際 3か所のうち1か所ずつ順に踏んだ）、既定値をここで変える。
+    page.set_default_navigation_timeout(120000)
+    page.set_default_timeout(90000)
     page.route(re.compile(r"\.(png|jpe?g|gif|webp|mp4|m3u8|ts)(\?|$)|/video/|pbs\.twimg\.com|video\.twimg\.com"),
                lambda r: r.abort())
     return browser, page
