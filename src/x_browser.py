@@ -314,9 +314,17 @@ def post(text: str, pin: bool = False) -> Optional[str]:
             type_text(page, text)
             page.wait_for_timeout(1500)
             found = watch_create_tweet(page)          # 押す前に仕掛ける
-            if not click_send(page):
-                _log("投稿ボタンを押せませんでした")
-                return None
+            pushed = click_send(page)
+            if not pushed:
+                # ★押せなかったと見えても、投稿は成立していることがある★
+                # （2026-09-26 21:00）。`click` がクリックを送った後の待ちで例外に
+                # なると「押せなかった」と返るが、X 側は受け取っている。そのまま
+                # 失敗にすると次の回が同じ本文を打ちに行き、X に重複で弾かれて
+                # 「投稿しました: …/status/?」という嘘のログだけが残る。
+                # **返事が来ていないことを確かめてから**失敗にする。
+                _log("投稿ボタンを押せませんでした。返事が来ていないか確かめます")
+                if not wait_status_id(page, found, timeout_ms=20000):
+                    return None
             # まず投稿の返事から id を取る（描画を待たない）。駄目なら画面から
             sid = wait_status_id(page, found)
             if sid:
