@@ -121,15 +121,27 @@ def type_text(page, text: str) -> None:
     page.keyboard.type(" ")
 
 
-def click_send(page) -> bool:
-    for name in ("tweetButton", "tweetButtonInline"):
-        try:
-            btn = page.locator(f'button[data-testid="{name}"]').first
-            if btn.count() and btn.is_enabled():
-                btn.click(timeout=6000)
-                return True
-        except Exception:
-            continue
+def click_send(page, timeout_ms: int = 60000) -> bool:
+    """投稿ボタンが**押せるようになるまで待ってから**押す。
+
+    2026-09-26 21:00、本文は入ったのに「投稿ボタンを押せませんでした」で告知が
+    落ちた。前はその場で `is_enabled()` を1回見るだけだったので、NAS（ARM）で
+    ボタンが有効になるのが遅れた回は素通りして False を返していた。
+    入力欄・「…」・ページを開く待ちと同じで、ここも描かれる・効くまで待つ。
+    """
+    waited = 0
+    while waited < timeout_ms:
+        for name in ("tweetButton", "tweetButtonInline"):
+            try:
+                btn = page.locator(f'button[data-testid="{name}"]').first
+                if btn.count() and btn.is_enabled():
+                    btn.click(timeout=15000)
+                    return True
+            except Exception:
+                continue
+        page.wait_for_timeout(500)
+        waited += 500
+    _log("投稿ボタンが押せるようになりません")
     return False
 
 
