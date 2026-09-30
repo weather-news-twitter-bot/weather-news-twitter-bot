@@ -80,6 +80,12 @@ FALLBACK_CASTER_KANJI = {
     'kobayashi': '小林 李衣奈', 'ogawa': '小川 千奈', 'uozumi': '魚住 茉由',
     'aohara': '青原 桃香', 'okamoto': '岡本 結子 リサ', 'fukuyoshi': '福吉 貴文',
     'tanabe': '田辺 真南葉', 'matsumoto': '松本 真央',
+    # 番組ディレクターの初担当（2026-10-01 コーヒータイム。WNL のお知らせより）。
+    # キャスター紹介ページには載らないので抽出では引けない＝ここに書くしかない。
+    # 識別コードは公表されていないので、ありうる綴りを同じ名前に向けておく
+    # （どれが来ても漢字で出る。外れたキーが残っても害は無い）。
+    'sato': '佐藤 剣慎', 'satou': '佐藤 剣慎', 'satoh': '佐藤 剣慎',
+    'sato2026': '佐藤 剣慎',
 }
 _CASTER_MAPS = None
 _YOUTUBE_ARCHIVES = None   # 1回の実行につき1度だけ取得（None=未取得）
@@ -176,6 +182,19 @@ def get_caster_maps() -> tuple[dict, dict]:
         log("ページからの抽出に失敗 → ハードコード辞書を使用")
         trans_map = dict(FALLBACK_CASTER_TRANS)
         kanji_map = dict(FALLBACK_CASTER_KANJI)
+    else:
+        # ★抽出に無いコードは控えの表で補う★（2026-10-01）
+        # 抽出はキャスター紹介ページ由来なので、**そこに載らない人**は引けない。
+        # 10/1 のコーヒータイムは番組ディレクターの佐藤剣慎さんが初担当（WNL の
+        # お知らせ）で、控えに書いても抽出が成功している限り使われず、X に
+        # 「11:00- sato」とローマ字で出るところだった。抽出を正としたまま、
+        # **抽出に無い分だけ**控えから拾う（控えが古くても抽出が上書きする）。
+        merged_trans = dict(FALLBACK_CASTER_TRANS)
+        merged_trans.update(trans_map)
+        trans_map = merged_trans
+        merged_kanji = dict(FALLBACK_CASTER_KANJI)
+        merged_kanji.update(kanji_map)
+        kanji_map = merged_kanji
 
     _CASTER_MAPS = (trans_map, kanji_map)
     return _CASTER_MAPS
