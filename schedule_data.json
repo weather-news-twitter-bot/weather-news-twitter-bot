@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "白井 ゆかり"
+      "caster": "白井 ゆかり",
+      "youtube": "https://youtu.be/yZWqWde1Cao"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-09-30T10:40:06.672670+09:00"
+  "timestamp": "2026-09-30T13:40:06.821693+09:00"
 }
