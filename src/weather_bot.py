@@ -446,7 +446,8 @@ def slot_name(p: dict) -> str:
 
 
 def build_change_tweet(target: date, lineup: list[dict], decisions: list,
-                       changes: list, detect_time: str) -> tuple[str, bool]:
+                       changes: list, detect_time: str,
+                       note_level: str = None) -> tuple[str, bool]:
     """
     決定/変更の通知ツイートを生成する。
 
@@ -484,7 +485,13 @@ def build_change_tweet(target: date, lineup: list[dict], decisions: list,
         lines += ["", "#ウェザーニュース #番組表"]
         return "\n".join(lines)
 
-    for level in ('full', 'short', 'mark'):
+    # note_level を渡すとその段から始める（手で出す時、検知時刻が無い場合に使う。
+    # 2026-10-01 のコーヒータイムは番組ディレクターの代打で、番組表のシステムに
+    # 登録が無いため API が埋まらず「検知した時刻」が存在しない）
+    levels = ('full', 'short', 'mark')
+    if note_level in levels:
+        levels = levels[levels.index(note_level):]
+    for level in levels:
         text = render(level)
         if weighted_len(text) <= TWEET_MAX_WEIGHTED:
             return text, True
