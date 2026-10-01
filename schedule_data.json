@@ -12,10 +12,10 @@
     },
     {
       "time": "08:00",
-      "caster": "青原 桃香",
+      "caster": "岡本 結子 リサ",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "profile_url": "https://weathernews.jp/wnl/caster/aohara.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
     },
     {
       "time": "11:00",
@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "青原 桃香"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/Q_7FJe7SUdk"
     },
     {
       "time": "11:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-02T04:40:05.465273+09:00"
+  "timestamp": "2026-10-02T08:26:22.640327+09:00"
 }
