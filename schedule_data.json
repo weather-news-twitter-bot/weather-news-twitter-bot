@@ -1,7 +1,7 @@
 {
-  "target_date": "2026-10-01",
-  "target_date_str": "2026年10月01日",
-  "announced_date": "2026-10-01",
+  "target_date": "2026-10-02",
+  "target_date_str": "2026年10月02日",
+  "announced_date": "2026-10-02",
   "tweeted": [
     {
       "time": "05:00",
@@ -19,10 +19,10 @@
     },
     {
       "time": "11:00",
-      "caster": "佐藤 剣慎",
-      "status": "confirmed",
+      "caster": null,
+      "status": "undecided",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": "https://weathernews.jp/wnl/caster/"
+      "profile_url": ""
     },
     {
       "time": "14:00",
@@ -40,29 +40,22 @@
     },
     {
       "time": "20:00",
-      "caster": "戸北 美月",
+      "caster": "小林 李衣奈",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
     }
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "魚住 茉由",
-      "youtube": "https://youtu.be/5aHJV4-v48k"
+      "caster": "魚住 茉由"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "青原 桃香",
-      "youtube": "https://youtu.be/LwVRVGkwWVI"
+      "caster": "青原 桃香"
     },
     {
       "time": "11:00",
@@ -72,20 +65,17 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "松本 真央",
-      "youtube": "https://youtu.be/oqd6oCjfusM"
+      "caster": "松本 真央"
     },
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "小川 千奈",
-      "youtube": "https://youtu.be/mc1r_JkQdcQ"
+      "caster": "小川 千奈"
     },
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "戸北 美月",
-      "youtube": "https://youtu.be/0hkvJP7gwHs"
+      "caster": "小林 李衣奈"
     },
     {
       "time": "23:00",
@@ -93,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-01T20:00:06.667027+09:00"
+  "timestamp": "2026-10-01T21:01:57.583923+09:00"
 }
