@@ -84,7 +84,8 @@
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "戸北 美月"
+      "caster": "戸北 美月",
+      "youtube": "https://youtu.be/mC8CDnN8xvo"
     },
     {
       "time": "23:00",
@@ -92,5 +93,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-03T16:40:06.998379+09:00"
+  "timestamp": "2026-10-03T19:40:10.222821+09:00"
 }
