@@ -78,7 +78,8 @@
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "山岸 愛梨"
+      "caster": "山岸 愛梨",
+      "youtube": "https://youtu.be/Fv0zqLP5Yug"
     },
     {
       "time": "20:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-03T09:20:06.370475+09:00"
+  "timestamp": "2026-10-03T16:40:06.998379+09:00"
 }
