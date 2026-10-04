@@ -55,7 +55,8 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/4i5dLYD8nEU"
     },
     {
       "time": "08:00",
@@ -88,5 +89,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-05T00:20:06.533968+09:00"
+  "timestamp": "2026-10-05T04:20:06.299293+09:00"
 }
