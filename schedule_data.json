@@ -26,10 +26,10 @@
     },
     {
       "time": "14:00",
-      "caster": null,
-      "status": "undecided",
+      "caster": "佐藤 剣慎",
+      "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": ""
+      "profile_url": "https://weathernews.jp/wnl/caster/"
     },
     {
       "time": "17:00",
