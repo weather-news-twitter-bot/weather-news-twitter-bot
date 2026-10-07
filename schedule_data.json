@@ -67,12 +67,13 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "小川 千奈"
+      "caster": "小川 千奈",
+      "youtube": "https://youtu.be/RdTaz7j9vQM"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": null
+      "caster": "佐藤 剣慎"
     },
     {
       "time": "17:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-07T08:20:06.588239+09:00"
+  "timestamp": "2026-10-07T11:00:06.959957+09:00"
 }
