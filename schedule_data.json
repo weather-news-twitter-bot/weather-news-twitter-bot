@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "佐藤 剣慎"
+      "caster": "佐藤 剣慎",
+      "youtube": "https://youtu.be/gjJ065qDRtY"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-08T10:20:06.487420+09:00"
+  "timestamp": "2026-10-08T13:40:06.455279+09:00"
 }
