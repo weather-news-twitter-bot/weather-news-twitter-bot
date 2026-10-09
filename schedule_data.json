@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "江川 清音"
+      "caster": "江川 清音",
+      "youtube": "https://youtu.be/-Y5Kk-hrt8U"
     },
     {
       "time": "14:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-09T08:20:06.064412+09:00"
+  "timestamp": "2026-10-09T10:40:06.873727+09:00"
 }
