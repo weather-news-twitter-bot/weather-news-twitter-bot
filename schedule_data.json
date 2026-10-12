@@ -1,92 +1,81 @@
 {
-  "target_date": "2026-10-12",
-  "target_date_str": "2026年10月12日",
-  "announced_date": "2026-10-12",
+  "target_date": "2026-10-13",
+  "target_date_str": "2026年10月13日",
+  "announced_date": "2026-10-13",
   "tweeted": [
     {
       "time": "05:00",
-      "caster": "福吉 貴文",
-      "status": "confirmed",
-      "program": "ウェザーニュースLiVE・モーニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
-    },
-    {
-      "time": "08:00",
       "caster": "松本 真央",
       "status": "confirmed",
-      "program": "ウェザーニュースLiVE・サンシャイン",
+      "program": "ウェザーニュースLiVE・モーニング",
       "profile_url": "https://weathernews.jp/wnl/caster/matsumoto.html"
     },
     {
-      "time": "11:00",
+      "time": "08:00",
       "caster": "岡本 結子 リサ",
       "status": "confirmed",
-      "program": "ウェザーニュースLiVE・コーヒータイム",
+      "program": "ウェザーニュースLiVE・サンシャイン",
       "profile_url": "https://weathernews.jp/wnl/caster/okamoto.html"
     },
     {
+      "time": "11:00",
+      "caster": null,
+      "status": "undecided",
+      "program": "ウェザーニュースLiVE・コーヒータイム",
+      "profile_url": ""
+    },
+    {
       "time": "14:00",
-      "caster": "田辺 真南葉",
+      "caster": "川畑 玲",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kawabata.html"
     },
     {
       "time": "17:00",
-      "caster": "魚住 茉由",
+      "caster": "福吉 貴文",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/uozumi.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/fukuyoshi.html"
     },
     {
       "time": "20:00",
-      "caster": "小川 千奈",
+      "caster": "戸北 美月",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・ムーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/ogawa.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
     }
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "福吉 貴文",
-      "youtube": "https://youtu.be/sKsB57CR4MU"
+      "caster": "松本 真央"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "松本 真央",
-      "youtube": "https://youtu.be/Ksr5ut5hGtM"
+      "caster": "岡本 結子 リサ"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "岡本 結子 リサ",
-      "youtube": "https://youtu.be/syrZsizM1aM"
+      "caster": null
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "田辺 真南葉",
-      "youtube": "https://youtu.be/z6ZNqSZFSec"
+      "caster": "川畑 玲"
     },
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "魚住 茉由",
-      "youtube": "https://youtu.be/MWpD4jIgcM0"
+      "caster": "福吉 貴文"
     },
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "小川 千奈",
-      "youtube": "https://youtu.be/fuDKpYKUIWk"
+      "caster": "戸北 美月"
     },
     {
       "time": "23:00",
@@ -94,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-12T19:40:06.793746+09:00"
+  "timestamp": "2026-10-12T21:01:34.411667+09:00"
 }
