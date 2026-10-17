@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "岡本 結子 リサ"
+      "caster": "岡本 結子 リサ",
+      "youtube": "https://youtu.be/LcH_yIw5C-I"
     },
     {
       "time": "11:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-18T04:00:06.423054+09:00"
+  "timestamp": "2026-10-18T08:20:05.771270+09:00"
 }
