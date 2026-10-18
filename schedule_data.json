@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "福吉 貴文"
+      "caster": "福吉 貴文",
+      "youtube": "https://youtu.be/6MIaOsZKFFo"
     },
     {
       "time": "11:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-19T04:40:06.874768+09:00"
+  "timestamp": "2026-10-19T08:20:05.882175+09:00"
 }
