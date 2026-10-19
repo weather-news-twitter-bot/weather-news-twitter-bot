@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "松本 真央"
+      "caster": "松本 真央",
+      "youtube": "https://youtu.be/LbMd2BvWHHU"
     },
     {
       "time": "11:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-20T04:40:05.994370+09:00"
+  "timestamp": "2026-10-20T08:20:06.203857+09:00"
 }
