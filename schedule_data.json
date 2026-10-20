@@ -55,7 +55,8 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "魚住 茉由"
+      "caster": "魚住 茉由",
+      "youtube": "https://youtu.be/bSKk3HT9XhQ"
     },
     {
       "time": "08:00",
@@ -88,5 +89,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-21T00:20:06.787894+09:00"
+  "timestamp": "2026-10-21T04:40:05.936390+09:00"
 }
