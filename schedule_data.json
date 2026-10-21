@@ -85,7 +85,8 @@
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "小林 李衣奈"
+      "caster": "小林 李衣奈",
+      "youtube": "https://youtu.be/WXt7bSSjxw8"
     },
     {
       "time": "23:00",
@@ -93,5 +94,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-21T16:40:06.322774+09:00"
+  "timestamp": "2026-10-21T20:00:06.968456+09:00"
 }
