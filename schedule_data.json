@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/Yugmv5wV_iE"
     },
     {
       "time": "14:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-23T08:20:05.722815+09:00"
+  "timestamp": "2026-10-23T10:40:06.011980+09:00"
 }
