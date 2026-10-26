@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "白井 ゆかり"
+      "caster": "白井 ゆかり",
+      "youtube": "https://youtu.be/AeZnF4ZDtvI"
     },
     {
       "time": "14:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-26T08:20:06.960980+09:00"
+  "timestamp": "2026-10-26T10:40:06.961431+09:00"
 }
