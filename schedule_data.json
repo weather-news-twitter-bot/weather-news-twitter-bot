@@ -61,7 +61,8 @@
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "白井 ゆかり"
+      "caster": "白井 ゆかり",
+      "youtube": "https://youtu.be/6N308xHU1uo"
     },
     {
       "time": "11:00",
@@ -89,5 +90,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-10-29T03:20:06.384853+09:00"
+  "timestamp": "2026-10-29T08:20:06.698064+09:00"
 }
