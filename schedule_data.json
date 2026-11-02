@@ -19,10 +19,10 @@
     },
     {
       "time": "11:00",
-      "caster": null,
-      "status": "undecided",
+      "caster": "佐藤 剣慎",
+      "status": "confirmed",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "profile_url": ""
+      "profile_url": "https://weathernews.jp/wnl/caster/sato.html"
     },
     {
       "time": "14:00",
@@ -55,7 +55,8 @@
     {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "福吉 貴文"
+      "caster": "福吉 貴文",
+      "youtube": "https://youtu.be/XFZQ5dORVwU"
     },
     {
       "time": "08:00",
@@ -65,7 +66,7 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": null
+      "caster": "佐藤 剣慎"
     },
     {
       "time": "14:00",
@@ -88,5 +89,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-03T00:20:06.372795+09:00"
+  "timestamp": "2026-11-03T04:21:49.890624+09:00"
 }
