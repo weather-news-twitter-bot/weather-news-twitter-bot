@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "佐藤 剣慎"
+      "caster": "佐藤 剣慎",
+      "youtube": "https://youtu.be/SkTaTn_Xleo"
     },
     {
       "time": "14:00",
@@ -90,5 +91,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-03T08:20:06.297069+09:00"
+  "timestamp": "2026-11-03T10:40:06.556663+09:00"
 }
