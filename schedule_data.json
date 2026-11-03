@@ -86,7 +86,8 @@
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "田辺 真南葉"
+      "caster": "田辺 真南葉",
+      "youtube": "https://youtu.be/QA8aaoypAho"
     },
     {
       "time": "18:30",
@@ -104,5 +105,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-03T16:22:09.611404+09:00"
+  "timestamp": "2026-11-03T16:40:07.513084+09:00"
 }
