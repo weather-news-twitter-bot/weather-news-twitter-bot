@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "小川 千奈"
+      "caster": "小川 千奈",
+      "youtube": "https://youtu.be/uSwlVrQk05g"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-04T10:40:06.368889+09:00"
+  "timestamp": "2026-11-04T13:40:07.056790+09:00"
 }
