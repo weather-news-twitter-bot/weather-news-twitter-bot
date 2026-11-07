@@ -1,7 +1,7 @@
 {
-  "target_date": "2026-11-07",
-  "target_date_str": "2026年11月07日",
-  "announced_date": "2026-11-07",
+  "target_date": "2026-11-08",
+  "target_date_str": "2026年11月08日",
+  "announced_date": "2026-11-08",
   "tweeted": [
     {
       "time": "05:00",
@@ -26,17 +26,17 @@
     },
     {
       "time": "14:00",
-      "caster": "田辺 真南葉",
+      "caster": "小林 李衣奈",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/kobayashi.html"
     },
     {
       "time": "17:00",
-      "caster": "戸北 美月",
+      "caster": "田辺 真南葉",
       "status": "confirmed",
       "program": "ウェザーニュースLiVE・イブニング",
-      "profile_url": "https://weathernews.jp/wnl/caster/tokita.html"
+      "profile_url": "https://weathernews.jp/wnl/caster/tanabe.html"
     },
     {
       "time": "20:00",
@@ -48,45 +48,34 @@
   ],
   "full": [
     {
-      "time": "00:00",
-      "program": "ウェザーニュースLiVE",
-      "caster": null
-    },
-    {
       "time": "05:00",
       "program": "ウェザーニュースLiVE・モーニング",
-      "caster": "松本 真央",
-      "youtube": "https://youtu.be/pV86JU3JquE"
+      "caster": "松本 真央"
     },
     {
       "time": "08:00",
       "program": "ウェザーニュースLiVE・サンシャイン",
-      "caster": "魚住 茉由",
-      "youtube": "https://youtu.be/HhktYr3kESM"
+      "caster": "魚住 茉由"
     },
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "青原 桃香",
-      "youtube": "https://youtu.be/-iAPiYdoUgg"
+      "caster": "青原 桃香"
     },
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "田辺 真南葉",
-      "youtube": "https://youtu.be/2GIP3l_UtO8"
+      "caster": "小林 李衣奈"
     },
     {
       "time": "17:00",
       "program": "ウェザーニュースLiVE・イブニング",
-      "caster": "戸北 美月",
-      "youtube": "https://youtu.be/bSzHe0DPaPM"
+      "caster": "田辺 真南葉"
     },
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "山岸 愛梨",
-      "youtube": "https://youtu.be/Cbc7dAjjezI"
+      "caster": "山岸 愛梨"
     },
     {
       "time": "23:00",
@@ -94,5 +83,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-07T20:00:06.594982+09:00"
+  "timestamp": "2026-11-07T21:01:57.452871+09:00"
 }
