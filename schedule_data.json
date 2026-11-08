@@ -85,7 +85,8 @@
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "山岸 愛梨"
+      "caster": "山岸 愛梨",
+      "youtube": "https://youtu.be/2U6OEwlbt8M"
     },
     {
       "time": "23:00",
@@ -93,5 +94,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-08T16:40:05.910204+09:00"
+  "timestamp": "2026-11-08T20:00:06.517197+09:00"
 }
