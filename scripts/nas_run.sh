@@ -53,12 +53,26 @@ if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt 2000000 ]; then
   tail -c 1000000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 
+# NAS の負荷を1行で出す（docs/NAS運用.md「ログに残す負荷の行」）。21時の告知だけ投稿画面が
+# 開かなくなった原因が NAS 側か X 側かを、数字で分けるための記録（2026-11-13）
+load_line() {
+  snap=$(top -b -n 1 -w 160 2>/dev/null)
+  wa=$(echo "$snap" | awk '/%Cpu/{print $10; exit}')
+  busy=$(echo "$snap" | awk 'NR>7 && $11!="top" && n<3 {if ($11 !~ /^\[/) sub(".*/","",$11); printf "%s(%s%%) ", $11, $7; n++}')
+  mem=$(awk '/MemAvailable/{a=$2}/SwapTotal/{t=$2}/SwapFree/{f=$2}END{printf "空きメモリ %dMB スワップ使用 %dMB", a/1024, (t-f)/1024}' /proc/meminfo)
+  echo "負荷($1): $(uptime | sed 's/.*load average: //') / 待ち(wa) ${wa}% / $mem / 上位: $busy"
+}
+
 {
   echo "=== $(date '+%F %T') user=$(id -un) $* ==="
+  t0=$(date +%s)
+  load_line 開始
   cd "$REPO" || exit 1
   git pull -q --ff-only 2>&1
   "$BASE/venv/bin/python" src/weather_bot.py 2>&1
   rc=$?
+  # 1分以上かかった回（ブラウザで投稿した回）は、終わりの負荷も残す
+  [ $(( $(date +%s) - t0 )) -ge 60 ] && load_line 終了
   if [ -z "$SKIP_TWEET_FLAG" ] && ! git diff --quiet -- schedule_data.json history.jsonl; then
     git add schedule_data.json history.jsonl
     git -c user.name="WNL NAS bot" -c user.email="weather-news-twitter-bot@users.noreply.github.com" \
