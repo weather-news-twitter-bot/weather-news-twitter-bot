@@ -31,6 +31,7 @@ export X_CDP=http://127.0.0.1:9333
 export X_BROWSER_START="sudo -n /usr/local/bin/docker start wnl-chrome"
 export X_BROWSER_STOP="sudo -n /usr/local/bin/docker stop -t 3 wnl-chrome"
 export X_COOKIES=$LOCAL/x_cookies.json     # 固定は cookie 直送（ブラウザ無し）。無ければブラウザ
+export PIN_ALERT_FILE=$LOCAL/pin_failed    # 固定を差し替えられなかった回の目印（下でメールに乗せる）
 
 for a in "$@"; do
   case "$a" in
@@ -77,6 +78,20 @@ if [ -f "$LOCAL/test_mail" ]; then
   echo "WNL 番組表 bot のメール通知の試験です（本物の失敗ではない）。ログの末尾:"
   echo
   tail -12 "$LOG"
+  exit 1
+fi
+# 固定ポストを差し替えられなかった回は、1回で知らせる（投稿と違って次の回が取り返さない。
+# 2026-11-11 は翌日の夕方まで前の日の番組表が固定のままだった）。目印は weather_bot.py が書く
+if [ -f "$PIN_ALERT_FILE" ]; then
+  echo "WNL 番組表 bot: 投稿は出ましたが、固定ポストを差し替えられませんでした。"
+  echo "プロフィールでその投稿の「…」→「プロフィールに固定する」を押してください。"
+  echo
+  cat "$PIN_ALERT_FILE"
+  rm -f "$PIN_ALERT_FILE"
+  echo
+  echo "ログの末尾:"
+  tail -20 "$LOG"
+  [ "$rc" -eq 0 ] && rm -f "$STREAK"
   exit 1
 fi
 if [ "$rc" -eq 0 ]; then

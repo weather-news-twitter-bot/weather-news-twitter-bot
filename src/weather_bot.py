@@ -561,9 +561,37 @@ def pin_tweet(tweet_id: str) -> bool:
     消える可能性がある＝失敗しても告知そのものは成功扱いにする（付加情報）。
 
     固定できる投稿は1件だけなので、新しく固定すれば前日ぶんは自動で外れる。
+
+    差し替えられなかった時は目印を残す（`flag_pin_failed`）。次の回は取り返さない
+    ので、人に知らせて直してもらう（docs/NAS運用.md「失敗の知らせ」）。
     """
     if tweet_id == 'none':
         return False
+    ok = _pin_tweet(tweet_id)
+    if not ok:
+        flag_pin_failed(tweet_id)
+    return ok
+
+
+def flag_pin_failed(tweet_id: str) -> None:
+    """固定を差し替えられなかったことを、目印のファイルに1行残す。
+
+    置き場は環境変数 PIN_ALERT_FILE（NAS では nas_run.sh が .local/pin_failed を渡す）。
+    無い環境（PC・手動実行）では何もしない。目印を読んでメールに乗せ、消すのは
+    nas_run.sh。ここで失敗しても投稿は成功扱いのまま（付加情報）。
+    """
+    path = os.getenv('PIN_ALERT_FILE')
+    if not path:
+        return
+    try:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.now(JST).strftime('%Y-%m-%d %H:%M')} "
+                    f"固定ポストを差し替えられませんでした（投稿の id: {tweet_id}）\n")
+    except OSError as e:
+        log(f"固定の失敗の目印を書けません: {e}")
+
+
+def _pin_tweet(tweet_id: str) -> bool:
     if tweet_via() == 'browser':
         import x_browser
         x_browser.set_logger(log)
