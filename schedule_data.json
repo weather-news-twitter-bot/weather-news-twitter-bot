@@ -65,7 +65,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "江川 清音"
+      "caster": "江川 清音",
+      "youtube": "https://youtu.be/mQXbN1yRiXM"
     },
     {
       "time": "17:00",
@@ -83,5 +84,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-12T21:30:35.462444+09:00"
+  "timestamp": "2026-11-12T21:40:08.274667+09:00"
 }
