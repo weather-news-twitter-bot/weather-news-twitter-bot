@@ -67,7 +67,8 @@
     {
       "time": "11:00",
       "program": "ウェザーニュースLiVE・コーヒータイム",
-      "caster": "青原 桃香"
+      "caster": "青原 桃香",
+      "youtube": "https://youtu.be/0gAdmBCb-uc"
     },
     {
       "time": "14:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-13T08:20:06.705054+09:00"
+  "timestamp": "2026-11-13T10:40:07.000494+09:00"
 }
