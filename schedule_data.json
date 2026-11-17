@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "青原 桃香"
+      "caster": "青原 桃香",
+      "youtube": "https://youtu.be/v_aSRJP9348"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-17T10:40:06.106961+09:00"
+  "timestamp": "2026-11-17T14:00:06.326174+09:00"
 }
