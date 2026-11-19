@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "駒木 結衣"
+      "caster": "駒木 結衣",
+      "youtube": "https://youtu.be/vQI9futV1b4"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-19T10:40:06.807508+09:00"
+  "timestamp": "2026-11-19T13:40:06.739955+09:00"
 }
