@@ -325,11 +325,15 @@ def post(text: str, pin: bool = False) -> Optional[str]:
                 _log("投稿ボタンを押せませんでした。返事が来ていないか確かめます")
                 if not wait_status_id(page, found, timeout_ms=20000):
                     return None
-            # まず投稿の返事から id を取る（描画を待たない）。駄目なら画面から
+            # id の取り方の順番は docs/NAS運用.md「投稿の id の取り方」。
+            # ① 投稿の返事（描画を待たない）→ ② cookie 直送で一覧を読む（ブラウザで
+            # ページを開かない）→ ③ ブラウザでプロフィールを開く（最後の手。NAS では重い）
             sid = wait_status_id(page, found)
             if sid:
                 _log(f"投稿の返事から id を取りました: {sid}")
             else:
+                sid = find_id_http(marker)
+            if not sid:
                 page.wait_for_timeout(3000)
                 sid = find_status_id(page, marker)
             _log(f"投稿しました: https://x.com/{HANDLE}/status/{sid or '?'}")
@@ -371,6 +375,121 @@ def _web_cookies() -> Optional[dict]:
     return None
 
 
+def _web_headers(c: dict) -> dict:
+    """web 版と同じ見え方で GraphQL を叩くための見出し（固定と一覧の読みで共通）。"""
+    return {"authorization": "Bearer " + WEB_BEARER, "x-csrf-token": c["ct0"],
+            "cookie": f"auth_token={c['auth_token']}; ct0={c['ct0']}",
+            "x-twitter-auth-type": "OAuth2Session", "x-twitter-active-user": "yes",
+            "content-type": "application/json",
+            "origin": "https://x.com", "referer": "https://x.com/",
+            "user-agent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                           "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")}
+
+
+# 自分の投稿一覧（プロフィールの「ポスト」タブ）。2026-11-21 に web 版の通信から取った。
+# queryId と features は web 版の更新で変わりうる → 通らなければブラウザの道に落ちる。
+TIMELINE_QUERY_ID = "ZFKu1DFS63hgrkLzR3Hsdw"
+MY_USER_ID = "1936975151951908864"           # @wnl_timetable
+TIMELINE_FEATURES = {k: v for k, v in (
+    kv.split("=") for kv in (
+        "rweb_video_screen_enabled=0,rweb_cashtags_enabled=1,"
+        "profile_label_improvements_pcf_label_in_post_enabled=1,"
+        "responsive_web_profile_redirect_enabled=1,rweb_tipjar_consumption_enabled=0,"
+        "verified_phone_label_enabled=0,creator_subscriptions_tweet_preview_api_enabled=1,"
+        "responsive_web_graphql_timeline_navigation_enabled=1,premium_content_api_read_enabled=0,"
+        "communities_web_enable_tweet_community_results_fetch=1,"
+        "c9s_tweet_anatomy_moderator_badge_enabled=1,"
+        "responsive_web_grok_analyze_button_fetch_trends_enabled=0,"
+        "responsive_web_grok_analyze_post_followups_enabled=1,"
+        "rweb_cashtags_composer_attachment_enabled=1,responsive_web_jetfuel_frame=1,"
+        "rweb_sports_post_context_enabled=0,x_elections_post_context_enabled=1,"
+        "responsive_web_grok_share_attachment_enabled=1,responsive_web_grok_annotations_enabled=1,"
+        "articles_preview_enabled=1,responsive_web_edit_tweet_api_enabled=1,"
+        "rweb_conversational_replies_downvote_enabled=0,"
+        "graphql_is_translatable_rweb_tweet_is_translatable_enabled=1,"
+        "view_counts_everywhere_api_enabled=1,longform_notetweets_consumption_enabled=1,"
+        "responsive_web_twitter_article_tweet_consumption_enabled=1,"
+        "content_disclosure_indicator_enabled=1,content_disclosure_ai_generated_indicator_enabled=1,"
+        "responsive_web_grok_show_grok_translated_post=1,"
+        "responsive_web_grok_analysis_button_from_backend=1,post_ctas_fetch_enabled=0,"
+        "freedom_of_speech_not_reach_fetch_enabled=1,standardized_nudges_misinfo=1,"
+        "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled=1,"
+        "longform_notetweets_rich_text_read_enabled=1,longform_notetweets_inline_media_enabled=0,"
+        "responsive_web_nested_quote_preview_enabled=1,responsive_web_grok_image_annotation_enabled=1,"
+        "responsive_web_grok_imagine_annotation_enabled=1,responsive_web_made_on_x_label_enabled=0,"
+        "responsive_web_grok_community_note_auto_translation_is_enabled=1,"
+        "responsive_web_enhance_cards_enabled=0").split(","))}
+TIMELINE_FEATURES = {k: v == "1" for k, v in TIMELINE_FEATURES.items()}
+
+
+def newest_id_with(body: str, marker: str) -> Optional[str]:
+    """一覧の JSON から、本文に marker を含む投稿のうち id が一番大きいものを返す。
+
+    固定ポスト（前日ぶん、または同じ日付の前の通知）も一覧に混ざる。id は新しいほど
+    大きいので、一番大きいものが今の投稿。JSON の形が変わっても拾えるよう、
+    `rest_id` と `full_text` を持つ所を木ごと辿る。
+    """
+    import json
+    try:
+        root = json.loads(body)
+    except Exception:
+        return None
+    best = None
+    stack = [root]
+    while stack:
+        x = stack.pop()
+        if isinstance(x, dict):
+            rid = x.get("rest_id")
+            legacy = x.get("legacy")
+            if (isinstance(rid, str) and rid.isdigit() and isinstance(legacy, dict)
+                    and marker in (legacy.get("full_text") or "")):
+                if best is None or int(rid) > int(best):
+                    best = rid
+            stack.extend(x.values())
+        elif isinstance(x, list):
+            stack.extend(x)
+    return best
+
+
+def find_id_http(marker: str, tries: int = 3, gap_sec: int = 5) -> Optional[str]:
+    """cookie だけで自分の投稿一覧を読み、marker を含む一番新しい投稿の id を返す。
+
+    ブラウザでプロフィールを開くと NAS では 90 秒でも開かないことがある（2026-11-20）。
+    一覧の読みは 1〜2 秒。投稿直後は一覧に載るのが遅れうるので、間を空けて読み直す。
+    """
+    c = _web_cookies()
+    if not c:
+        return None
+    import json
+    import time
+    import urllib.parse
+    import urllib.request
+    q = urllib.parse.urlencode({
+        "variables": json.dumps({"userId": MY_USER_ID, "count": 20,
+                                 "includePromotedContent": False, "withVoice": True},
+                                separators=(",", ":")),
+        "features": json.dumps(TIMELINE_FEATURES, separators=(",", ":")),
+        "fieldToggles": json.dumps({"withArticlePlainText": False}, separators=(",", ":")),
+    })
+    url = f"https://x.com/i/api/graphql/{TIMELINE_QUERY_ID}/UserOriginalsTimeline?{q}"
+    for i in range(tries):
+        if i:
+            time.sleep(gap_sec)
+        try:
+            req = urllib.request.Request(url, headers=_web_headers(c))
+            with urllib.request.urlopen(req, timeout=20) as r:
+                body = r.read().decode("utf-8", "replace")
+        except Exception as e:
+            _log(f"一覧から id を引けません（{i + 1}回目）: {str(e)[:120]}")
+            continue
+        sid = newest_id_with(body, marker)
+        if sid:
+            _log(f"一覧から id を引きました（cookie 直送）: {sid}")
+            return sid
+        _log(f"一覧に目印の投稿がまだありません（{i + 1}回目）")
+    return None
+
+
 def pin_http(status_id: str) -> bool:
     """cookie だけで固定する。ブラウザを起こさないので 1 秒で終わる（NAS で実測 200）。
 
@@ -387,13 +506,7 @@ def pin_http(status_id: str) -> bool:
                        "queryId": PIN_QUERY_ID}).encode()
     req = urllib.request.Request(
         f"https://x.com/i/api/graphql/{PIN_QUERY_ID}/PinTweet", data=body, method="POST",
-        headers={"authorization": "Bearer " + WEB_BEARER, "x-csrf-token": c["ct0"],
-                 "cookie": f"auth_token={c['auth_token']}; ct0={c['ct0']}",
-                 "x-twitter-auth-type": "OAuth2Session", "x-twitter-active-user": "yes",
-                 "content-type": "application/json",
-                 "origin": "https://x.com", "referer": "https://x.com/",
-                 "user-agent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                                "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")})
+        headers=_web_headers(c))
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             msg = r.read().decode("utf-8", "replace")
