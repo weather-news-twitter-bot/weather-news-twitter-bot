@@ -84,7 +84,8 @@
     {
       "time": "20:00",
       "program": "ウェザーニュースLiVE・ムーン",
-      "caster": "小川 千奈"
+      "caster": "小川 千奈",
+      "youtube": "https://youtu.be/NMZPbYMnUn8"
     },
     {
       "time": "23:00",
@@ -92,5 +93,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-22T15:00:07.847078+09:00"
+  "timestamp": "2026-11-22T20:00:07.084392+09:00"
 }
