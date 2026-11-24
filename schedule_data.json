@@ -73,7 +73,8 @@
     {
       "time": "14:00",
       "program": "ウェザーニュースLiVE・アフタヌーン",
-      "caster": "川畑 玲"
+      "caster": "川畑 玲",
+      "youtube": "https://youtu.be/TWBEWrjNtqs"
     },
     {
       "time": "17:00",
@@ -91,5 +92,5 @@
       "caster": null
     }
   ],
-  "timestamp": "2026-11-24T10:40:06.041398+09:00"
+  "timestamp": "2026-11-24T14:00:06.328783+09:00"
 }
